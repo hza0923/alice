@@ -11,19 +11,19 @@ network_bandwidth_mbps:
   "2080super-3060": 1000.0
 
 # Optional node metadata for runtime (not read by the solver today).
-nodes:
-  - worker_name: "3060_0"
-    device_type: "3060"
-    address: 192.168.1.10:50051
-  - worker_name: "2080super_0"
-    device_type: "2080super"
-    address: 192.168.1.11:50051
+# nodes:
+#   - worker_name: "3060_0"
+#     device_type: "3060"
+#     address: 192.168.1.10:50051
+#   - worker_name: "2080super_0"
+#     device_type: "2080super"
+#     address: 192.168.1.11:50051
 
 solve:
   registry_path: profiling/artifacts/registry/device_registry.v3.json
   model_config: configs/model/llama2_7b.yaml
-  batch_size: 1
-  target_seq_len: 2048
+  batch_size: 32
+  target_seq_len: 64
   prefer_bs: 32
   use_fine_grained: true
   tail_candidates: [1, 2, 3, 4, 5, 6, 7]

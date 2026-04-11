@@ -5,28 +5,28 @@
     "sim-req-1": {
       "req_id": "sim-req-1",
       "worker_name": "2080super_0",
-      "created_monotonic": 87109.312,
+      "created_monotonic": 90567.812,
       "finished_monotonic": null,
       "hops": [
         {
           "step_id": 1,
           "phase": "decode",
-          "expected_compute_ms": 25.53074950080379,
-          "actual_compute_ms": 25.99270000000331,
-          "expected_comm_bytes": 262144,
-          "expected_comm_ms": 0.20971520000000002,
-          "actual_comm_ms": 945.1946000000007,
-          "payload_bytes_sent": 262144
+          "expected_compute_ms": 33.76470791301632,
+          "actual_compute_ms": 34.47529999999688,
+          "expected_comm_bytes": 704512,
+          "expected_comm_ms": 5.636096,
+          "actual_comm_ms": 7.010199999996303,
+          "payload_bytes_sent": 704512
         },
         {
-          "step_id": 6,
+          "step_id": 4,
           "phase": "decode",
-          "expected_compute_ms": 25.551330602177583,
-          "actual_compute_ms": 29.11069999998972,
-          "expected_comm_bytes": 262144,
-          "expected_comm_ms": 0.20971520000000002,
-          "actual_comm_ms": 12.378699999999299,
-          "payload_bytes_sent": 262144
+          "expected_compute_ms": 33.79153596501384,
+          "actual_compute_ms": 33.80880000000275,
+          "expected_comm_bytes": 704512,
+          "expected_comm_ms": 5.636096,
+          "actual_comm_ms": 4.981999999998266,
+          "payload_bytes_sent": 704512
         }
       ]
     }

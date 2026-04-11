@@ -3,39 +3,39 @@
     {
       "designated_tail_n": 1,
       "feasible": true,
-      "tbt_ms": 25.9835337310273
+      "tbt_ms": 36.01512515422684
     },
     {
       "designated_tail_n": 2,
       "feasible": true,
-      "tbt_ms": 26.393795269689317
+      "tbt_ms": 35.34983988426729
     },
     {
       "designated_tail_n": 3,
       "feasible": true,
-      "tbt_ms": 25.9835337310273
+      "tbt_ms": 35.64994710616477
     },
     {
       "designated_tail_n": 4,
       "feasible": true,
-      "tbt_ms": 26.09220373224059
+      "tbt_ms": 35.518248646228464
     },
     {
       "designated_tail_n": 5,
       "feasible": true,
-      "tbt_ms": 26.232064345093104
+      "tbt_ms": 35.739473607570446
     },
     {
       "designated_tail_n": 6,
       "feasible": true,
-      "tbt_ms": 26.36878384833049
+      "tbt_ms": 35.65364463439938
     },
     {
       "designated_tail_n": 7,
       "feasible": true,
-      "tbt_ms": 25.9835337310273
+      "tbt_ms": 36.01512515422684
     }
   ],
-  "best_designated_tail_n": 1,
-  "best_tbt_ms": 25.9835337310273
+  "best_designated_tail_n": 2,
+  "best_tbt_ms": 35.34983988426729
 }

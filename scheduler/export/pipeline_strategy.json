@@ -1,6 +1,6 @@
 {
   "schema_version": "pipeline_strategy.v2",
-  "generated_at": "2026-04-11T01:26:24Z",
+  "generated_at": "2026-04-11T03:57:00Z",
   "model": {
     "name": "llama2-7b",
     "num_layers": 32,
@@ -13,16 +13,16 @@
   },
   "schedule_input": {
     "bs": 32,
-    "target_seq_len": 32,
+    "target_seq_len": 64,
     "designated_device": "3060",
-    "designated_tail_n": 1,
+    "designated_tail_n": 2,
     "use_fine_grained": true
   },
   "objective": {
     "name": "min_tbt_ms",
-    "value": 25.9835337310273
+    "value": 35.34983988426729
   },
-  "tbt_ms": 25.9835337310273,
+  "tbt_ms": 35.34983988426729,
   "pipeline_stages": [
     {
       "worker_name": "3060_0",
@@ -83,47 +83,6 @@
         "layer8_up_projection",
         "layer8_down_projection",
         "layer9_qkv_projection",
-        "output_embed_lm_head"
-      ],
-      "stage_params": {
-        "base_time": 25.43660879407102,
-        "increase_time": 0.016233543064019293,
-        "comp_time_ms": 25.956082172119636,
-        "base_size": 786432,
-        "inc_size": 0
-      },
-      "comm_bytes_to_next": 786432,
-      "comm_time_ms": 6.291456,
-      "next_worker": "2080super_0",
-      "is_last_worker": false,
-      "stage_models": {
-        "decode": {
-          "time_ms": {
-            "form": "linear",
-            "base": 25.43660879407102,
-            "inc": 0.016233543064019293,
-            "x": "seq_len",
-            "unit": "ms",
-            "expr": "base + inc * x"
-          },
-          "comm_bytes": {
-            "form": "linear",
-            "base": 786432,
-            "inc": 0,
-            "x": "seq_len",
-            "unit": "bytes",
-            "expr": "base + inc * x"
-          }
-        },
-        "prefill": {
-          "time_ms": null,
-          "comm_bytes": null
-        }
-      }
-    },
-    {
-      "worker_name": "2080super_0",
-      "modules_to_execute": [
         "layer9_attn_qk",
         "layer9_attn_av",
         "layer9_o_projection",
@@ -143,6 +102,48 @@
         "layer11_down_projection",
         "layer12_qkv_projection",
         "layer12_attn_qk",
+        "layer31_down_projection",
+        "output_embed_lm_head"
+      ],
+      "stage_params": {
+        "base_time": 33.90478416866632,
+        "increase_time": 0.022578995556265347,
+        "comp_time_ms": 35.3498398842673,
+        "base_size": 0,
+        "inc_size": 2048
+      },
+      "comm_bytes_to_next": 131072,
+      "comm_time_ms": 1.0485760000000002,
+      "next_worker": "2080super_0",
+      "is_last_worker": false,
+      "stage_models": {
+        "decode": {
+          "time_ms": {
+            "form": "linear",
+            "base": 33.90478416866632,
+            "inc": 0.022578995556265347,
+            "x": "seq_len",
+            "unit": "ms",
+            "expr": "base + inc * x"
+          },
+          "comm_bytes": {
+            "form": "linear",
+            "base": 0,
+            "inc": 2048,
+            "x": "seq_len",
+            "unit": "bytes",
+            "expr": "base + inc * x"
+          }
+        },
+        "prefill": {
+          "time_ms": null,
+          "comm_bytes": null
+        }
+      }
+    },
+    {
+      "worker_name": "2080super_0",
+      "modules_to_execute": [
         "layer12_attn_av",
         "layer12_o_projection",
         "layer12_up_projection",
@@ -212,91 +213,11 @@
         "layer23_attn_av",
         "layer23_o_projection",
         "layer23_up_projection",
-        "layer23_down_projection"
-      ],
-      "stage_params": {
-        "base_time": 25.324938487065833,
-        "increase_time": 0.020581101373795544,
-        "comp_time_ms": 25.98353373102729,
-        "base_size": 262144,
-        "inc_size": 0
-      },
-      "comm_bytes_to_next": 262144,
-      "comm_time_ms": 0.20971520000000002,
-      "next_worker": "tx2_0",
-      "is_last_worker": false,
-      "stage_models": {
-        "decode": {
-          "time_ms": {
-            "form": "linear",
-            "base": 25.324938487065833,
-            "inc": 0.020581101373795544,
-            "x": "seq_len",
-            "unit": "ms",
-            "expr": "base + inc * x"
-          },
-          "comm_bytes": {
-            "form": "linear",
-            "base": 262144,
-            "inc": 0,
-            "x": "seq_len",
-            "unit": "bytes",
-            "expr": "base + inc * x"
-          }
-        },
-        "prefill": {
-          "time_ms": null,
-          "comm_bytes": null
-        }
-      }
-    },
-    {
-      "worker_name": "tx2_0",
-      "modules_to_execute": [
+        "layer23_down_projection",
         "layer24_qkv_projection",
         "layer24_attn_qk",
         "layer24_attn_av",
-        "layer24_o_projection"
-      ],
-      "stage_params": {
-        "base_time": 17.301763676539068,
-        "increase_time": 0.034132939144968975,
-        "comp_time_ms": 18.394017729178074,
-        "base_size": 262144,
-        "inc_size": 0
-      },
-      "comm_bytes_to_next": 262144,
-      "comm_time_ms": 0.20971520000000002,
-      "next_worker": "agx_0",
-      "is_last_worker": false,
-      "stage_models": {
-        "decode": {
-          "time_ms": {
-            "form": "linear",
-            "base": 17.301763676539068,
-            "inc": 0.034132939144968975,
-            "x": "seq_len",
-            "unit": "ms",
-            "expr": "base + inc * x"
-          },
-          "comm_bytes": {
-            "form": "linear",
-            "base": 262144,
-            "inc": 0,
-            "x": "seq_len",
-            "unit": "bytes",
-            "expr": "base + inc * x"
-          }
-        },
-        "prefill": {
-          "time_ms": null,
-          "comm_bytes": null
-        }
-      }
-    },
-    {
-      "worker_name": "agx_0",
-      "modules_to_execute": [
+        "layer24_o_projection",
         "layer24_up_projection",
         "layer24_down_projection",
         "layer25_qkv_projection",
@@ -339,33 +260,32 @@
         "layer31_attn_qk",
         "layer31_attn_av",
         "layer31_o_projection",
-        "layer31_up_projection",
-        "layer31_down_projection"
+        "layer31_up_projection"
       ],
       "stage_params": {
-        "base_time": 24.901081543553403,
-        "increase_time": 0.03278230957566679,
-        "comp_time_ms": 25.95011544997474,
-        "base_size": 262144,
+        "base_time": 33.49642739304111,
+        "increase_time": 0.02682805199752109,
+        "comp_time_ms": 35.21342272088246,
+        "base_size": 704512,
         "inc_size": 0
       },
-      "comm_bytes_to_next": 262144,
-      "comm_time_ms": 0.20971520000000002,
+      "comm_bytes_to_next": 704512,
+      "comm_time_ms": 5.636096,
       "next_worker": "3060_0",
       "is_last_worker": true,
       "stage_models": {
         "decode": {
           "time_ms": {
             "form": "linear",
-            "base": 24.901081543553403,
-            "inc": 0.03278230957566679,
+            "base": 33.49642739304111,
+            "inc": 0.02682805199752109,
             "x": "seq_len",
             "unit": "ms",
             "expr": "base + inc * x"
           },
           "comm_bytes": {
             "form": "linear",
-            "base": 262144,
+            "base": 704512,
             "inc": 0,
             "x": "seq_len",
             "unit": "bytes",
