@@ -1,0 +1,32 @@
+# device_group keys MUST match device ids in device_registry (e.g. legacy profile "device": "3060").
+device_group:
+  "3060": 1
+  "2080super": 1
+  "agx": 1
+  "tx2": 1
+
+designated_device: "3060"
+
+network_bandwidth_mbps:
+  default: 10000.0
+  "3060-2080super": 1000.0
+  "2080super-3060": 1000.0
+
+# Optional node metadata for runtime (not read by the solver today).
+# nodes:
+#   - worker_name: "3060_0"
+#     device_type: "3060"
+#     address: 192.168.1.10:50051
+#   - worker_name: "2080super_0"
+#     device_type: "2080super"
+#     address: 192.168.1.11:50051
+
+solve:
+  registry_path: C:\Users\84538\Desktop\实验室\202505-~\LLM学习\grpc_heterogeneous_pipeline_nextgen\profiling\artifacts\registry\device_registry.v3.json
+  model_config: C:\Users\84538\Desktop\实验室\202505-~\LLM学习\grpc_heterogeneous_pipeline_nextgen\configs\model\llama2_7b.yaml
+  batch_size: 32
+  target_seq_len: 32
+  prefer_bs: 32
+  use_fine_grained: true
+  tail_candidates: [1, 2, 3, 4, 5, 6, 7]
+  out_dir: scheduler/export

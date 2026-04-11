@@ -1,0 +1,19 @@
+runtime:
+  transport_mode: grpc
+  grpc:
+    use_streaming: false
+    rpc_timeout_ms: 3000
+  queues:
+    task_queue_maxsize: 2048
+    send_queue_maxsize: 2048
+  scheduling:
+    strict_ordering: false
+    max_in_flight_requests: 512
+  execution:
+    mode: sleep_executor
+    shape_executor:
+      enable_sdpa: false
+      random_seed: 42
+  observability:
+    metrics_enabled: true
+    tracing_enabled: true

@@ -1,0 +1,34 @@
+{
+  "worker_name": "agx_0",
+  "schema_version": "request_journal.v1",
+  "requests": {
+    "sim-req-1": {
+      "req_id": "sim-req-1",
+      "worker_name": "agx_0",
+      "created_monotonic": 87127.437,
+      "finished_monotonic": null,
+      "hops": [
+        {
+          "step_id": 3,
+          "phase": "decode",
+          "expected_compute_ms": 25.22890463931007,
+          "actual_compute_ms": 36.58029999999712,
+          "expected_comm_bytes": 262144,
+          "expected_comm_ms": 0.20971520000000002,
+          "actual_comm_ms": 8.560399999993251,
+          "payload_bytes_sent": 262144
+        },
+        {
+          "step_id": 8,
+          "phase": "decode",
+          "expected_compute_ms": 25.26168694888574,
+          "actual_compute_ms": 30.810299999998847,
+          "expected_comm_bytes": 262144,
+          "expected_comm_ms": 0.20971520000000002,
+          "actual_comm_ms": 4.103599999993435,
+          "payload_bytes_sent": 262144
+        }
+      ]
+    }
+  }
+}

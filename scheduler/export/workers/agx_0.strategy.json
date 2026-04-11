@@ -1,0 +1,67 @@
+{
+  "schema_version": "worker_strategy.v1",
+  "generated_at": "2026-04-11T01:27:38Z",
+  "worker_name": "agx_0",
+  "global_strategy_ref": "pipeline_strategy.json",
+  "execution_plan": {
+    "head_ordered_modules": [
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection"
+    ],
+    "tail_ordered_modules": [],
+    "phase_rules": {
+      "prefill": {
+        "enabled": true
+      },
+      "decode": {
+        "enabled": true
+      }
+    },
+    "transfer_policy": {
+      "compute_payload_bytes_locally": true,
+      "formula_ref": "model_config.comm_contract.v1"
+    }
+  }
+}

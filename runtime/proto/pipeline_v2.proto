@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package pipelinev2;
+
+// -----------------------------------------------------------------------------
+// Data plane
+// -----------------------------------------------------------------------------
+
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  PHASE_PREFILL = 1;
+  PHASE_DECODE = 2;
+}
+
+message Frame {
+  string req_id = 1;
+  uint64 step_id = 2;
+  Phase phase = 3;
+  uint32 context_len = 4;
+  uint32 target_len = 5;
+  bytes payload = 6;
+  bool end_of_request = 7;
+  uint32 batch_size = 8;
+  // Propagates the legacy TaskSubmitRequest.is_end signal end-to-end (drain + shutdown).
+  bool pipeline_stop = 9;
+  // Decremented once per hop; when 0 on the first stage worker, ReportPipelineComplete is sent.
+  uint32 ring_remaining = 10;
+  // Set by the tail when forwarding the final pipeline_stop hop (ring_remaining -> 0). First worker
+  // reads this when reporting PipelineComplete so the master only shuts down after the ring drains.
+  uint32 pipeline_total_tokens = 11;
+  // True when the frame is returning to the first worker after traversing the ring (tail_model path).
+  bool ring_return = 12;
+}
+
+message Ack {
+  bool ok = 1;
+  string message = 2;
+}
+
+// -----------------------------------------------------------------------------
+// Control plane (master)
+// -----------------------------------------------------------------------------
+
+message RegisterWorkerRequest {
+  string worker_name = 1;
+  string worker_address = 2;
+}
+
+message RegisterWorkerResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+message NextWorkerRequest {
+  string worker_name = 1;
+}
+
+message NextWorkerResponse {
+  bool ok = 1;
+  string message = 2;
+  bool all_registered = 3;
+  bool has_next = 4;
+  string next_worker_address = 5;
+}
+
+message TaskSubmitRequest {
+  string req_id = 1;
+  uint32 batch_size = 2;
+  uint32 context_len = 3;
+  uint32 target_len = 4;
+  bool is_end = 5;
+}
+
+message TaskSubmitResponse {
+  bool ok = 1;
+  string message = 2;
+}
+
+message RequestFinishedReport {
+  string req_id = 1;
+}
+
+message PipelineCompleteReport {
+  int32 total_tokens = 1;
+}
+
+message PipelineEndNotification {
+  string message = 1;
+  uint32 ring_remaining = 2;
+}
+
+message PeerAddressRequest {
+  string worker_name = 1;
+}
+
+message PeerAddressResponse {
+  bool ok = 1;
+  string message = 2;
+  string address = 3;
+}
+
+service MasterControl {
+  rpc RegisterWorker(RegisterWorkerRequest) returns (RegisterWorkerResponse);
+  rpc GetNextWorker(NextWorkerRequest) returns (NextWorkerResponse);
+  rpc GetPeerAddress(PeerAddressRequest) returns (PeerAddressResponse);
+  rpc SubmitTask(TaskSubmitRequest) returns (TaskSubmitResponse);
+  rpc ReportRequestFinished(RequestFinishedReport) returns (Ack);
+  rpc ReportPipelineComplete(PipelineCompleteReport) returns (Ack);
+}
+
+service DataPlane {
+  rpc SendFrame(Frame) returns (Ack);
+  rpc NotifyPipelineEnd(PipelineEndNotification) returns (Ack);
+}

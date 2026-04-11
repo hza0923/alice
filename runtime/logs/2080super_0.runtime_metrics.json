@@ -1,0 +1,34 @@
+{
+  "worker_name": "2080super_0",
+  "schema_version": "request_journal.v1",
+  "requests": {
+    "sim-req-1": {
+      "req_id": "sim-req-1",
+      "worker_name": "2080super_0",
+      "created_monotonic": 87109.312,
+      "finished_monotonic": null,
+      "hops": [
+        {
+          "step_id": 1,
+          "phase": "decode",
+          "expected_compute_ms": 25.53074950080379,
+          "actual_compute_ms": 25.99270000000331,
+          "expected_comm_bytes": 262144,
+          "expected_comm_ms": 0.20971520000000002,
+          "actual_comm_ms": 945.1946000000007,
+          "payload_bytes_sent": 262144
+        },
+        {
+          "step_id": 6,
+          "phase": "decode",
+          "expected_compute_ms": 25.551330602177583,
+          "actual_compute_ms": 29.11069999998972,
+          "expected_comm_bytes": 262144,
+          "expected_comm_ms": 0.20971520000000002,
+          "actual_comm_ms": 12.378699999999299,
+          "payload_bytes_sent": 262144
+        }
+      ]
+    }
+  }
+}
