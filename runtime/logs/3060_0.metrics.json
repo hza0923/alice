@@ -1,0 +1,54 @@
+{
+  "worker_name": "3060_0",
+  "schema_version": "request_journal.v1",
+  "requests": {
+    "cli-req": {
+      "req_id": "cli-req",
+      "worker_name": "3060_0",
+      "created_monotonic": 94267.0,
+      "finished_monotonic": 94313.625,
+      "hops": [
+        {
+          "step_id": 0,
+          "phase": "decode",
+          "expected_compute_ms": 33.927363164222584,
+          "actual_compute_ms": 33.97349999999477,
+          "expected_comm_bytes": 2048,
+          "expected_comm_ms": 1.0485760000000002,
+          "actual_comm_ms": 11.039500000002533,
+          "payload_bytes_sent": 2048
+        },
+        {
+          "step_id": 2,
+          "phase": "decode",
+          "expected_compute_ms": 33.927363164222584,
+          "actual_compute_ms": 33.94049999999993,
+          "expected_comm_bytes": 2048,
+          "expected_comm_ms": 1.0485760000000002,
+          "actual_comm_ms": 0.0,
+          "payload_bytes_sent": 2048
+        },
+        {
+          "step_id": 3,
+          "phase": "decode",
+          "expected_compute_ms": 33.94994215977885,
+          "actual_compute_ms": 33.95809999999244,
+          "expected_comm_bytes": 4096,
+          "expected_comm_ms": 1.0485760000000002,
+          "actual_comm_ms": 3.4634999999951788,
+          "payload_bytes_sent": 4096
+        },
+        {
+          "step_id": 5,
+          "phase": "decode",
+          "expected_compute_ms": 33.94994215977885,
+          "actual_compute_ms": 33.96649999999113,
+          "expected_comm_bytes": 4096,
+          "expected_comm_ms": 1.0485760000000002,
+          "actual_comm_ms": 0.0,
+          "payload_bytes_sent": 4096
+        }
+      ]
+    }
+  }
+}

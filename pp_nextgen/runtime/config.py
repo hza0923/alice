@@ -16,6 +16,7 @@ class RuntimeConfig:
     strict_ordering: bool
     max_in_flight_requests: int
     rpc_timeout_ms: int
+    registration_wait_timeout_ms: int
     execution_mode: str
     shape_enable_sdpa: bool
     shape_random_seed: int
@@ -35,6 +36,7 @@ def load_runtime_config(path: str | Path) -> RuntimeConfig:
         strict_ordering=bool(sched.get("strict_ordering", False)),
         max_in_flight_requests=int(sched.get("max_in_flight_requests", 512)),
         rpc_timeout_ms=int(grpc.get("rpc_timeout_ms", 3000)),
+        registration_wait_timeout_ms=int(grpc.get("registration_wait_timeout_ms", 600_000)),
         execution_mode=str(ex.get("mode", "sleep_executor")),
         shape_enable_sdpa=bool(shape.get("enable_sdpa", False)),
         shape_random_seed=int(shape.get("random_seed", 42)),

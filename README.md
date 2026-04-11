@@ -153,7 +153,11 @@ python -m pp_nextgen.runtime.cli master --bind 0.0.0.0:50050 --pipeline-strategy
 ```
 
 ```bash
-python -m pp_nextgen.runtime.cli worker --worker-name 3060_0 --bind 0.0.0.0:50051 --master 192.168.1.1:50050 --pipeline-strategy scheduler/export/pipeline_strategy.json --worker-strategy scheduler/export/workers/3060_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out runtime/logs/3060_0.metrics.json
+# worker0——same device with master
+python -m pp_nextgen.runtime.cli worker --worker-name 3060_0 --bind 0.0.0.0:50051 --master 127.0.0.1:50050 --pipeline-strategy scheduler/export/pipeline_strategy.json --worker-strategy scheduler/export/workers/3060_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out runtime/logs/3060_0.metrics.json
+
+# 2080super
+python -m pp_nextgen.runtime.cli worker --worker-name 2080super_0 --bind 0.0.0.0:50051 --master 192.168.31.237:50050 --pipeline-strategy scheduler/export/pipeline_strategy.json --worker-strategy scheduler/export/workers/2080super_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out runtime/logs/2080super_0.metrics.json
 ```
 
 Start the **first** `pipeline_stages` worker before or after others as your process manager allows; all workers must register before the master can drive a full pipeline.

@@ -139,10 +139,11 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         if not reg.ok:
             LOG.error("register failed: %s", reg.message)
             return False
+        reg_wait_s = float(self._rt.registration_wait_timeout_ms) / 1000.0
         while True:
             nxt = await self._master.GetNextWorker(
                 pv2.NextWorkerRequest(worker_name=self.worker_name),
-                timeout=float(self._rt.rpc_timeout_ms) / 1000.0,
+                timeout=reg_wait_s,
             )
             if nxt.ok and nxt.all_registered and nxt.has_next and nxt.next_worker_address:
                 nch = grpc.aio.insecure_channel(nxt.next_worker_address)

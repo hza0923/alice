@@ -114,9 +114,11 @@ async def _run_worker(args: argparse.Namespace) -> None:
         metrics_out=args.metrics_out,
     )
     await wr.start()
-    await wr.connect_master()
-    await wr.wait_done()
-    await wr.stop()
+    try:
+        await wr.connect_master()
+        await wr.wait_done()
+    finally:
+        await wr.stop()
 
 
 def main() -> None:

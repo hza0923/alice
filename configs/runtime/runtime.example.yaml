@@ -3,6 +3,8 @@ runtime:
   grpc:
     use_streaming: false
     rpc_timeout_ms: 3000
+    # Master GetNextWorker does not return until all workers registered; keep this comfortably above worst-case startup skew.
+    registration_wait_timeout_ms: 600000
   queues:
     task_queue_maxsize: 2048
     send_queue_maxsize: 2048

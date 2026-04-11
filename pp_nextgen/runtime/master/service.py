@@ -32,6 +32,7 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
         self._latency = MasterLatencyTracker()
         self._first_stub: Optional[pv2_grpc.DataPlaneStub] = None
         self._total_tokens_reported = 0
+        self._register_lock = asyncio.Lock()
 
     @property
     def latency_tracker(self) -> MasterLatencyTracker:
@@ -61,16 +62,27 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
         addr = request.worker_address
         if name not in self._expected:
             return pv2.RegisterWorkerResponse(ok=False, message=f"unknown worker_name {name}")
-        if name in self._addresses:
-            return pv2.RegisterWorkerResponse(ok=False, message=f"duplicate register {name}")
-        self._addresses[name] = addr
-        LOG.info("registered %s -> %s (%d/%d)", name, addr, len(self._addresses), len(self._expected))
-        if self._addresses.keys() == self._expected:
-            self._all_registered.set()
-            ch = grpc.aio.insecure_channel(self._addresses[self._first_worker])
-            self._first_stub = pv2_grpc.DataPlaneStub(ch)
-            self._ready.set()
-            await self.start_send_loop()
+        async with self._register_lock:
+            if name in self._addresses:
+                # Same worker reconnecting (client retry, process restart while master stays up).
+                if self._addresses[name] == addr:
+                    LOG.info("register idempotent ok %s -> %s", name, addr)
+                    return pv2.RegisterWorkerResponse(ok=True, message="already registered")
+                return pv2.RegisterWorkerResponse(
+                    ok=False,
+                    message=(
+                        f"duplicate register {name}: already {self._addresses[name]!r}, "
+                        f"got {addr!r} (stop the other process or use a unique worker_name)"
+                    ),
+                )
+            self._addresses[name] = addr
+            LOG.info("registered %s -> %s (%d/%d)", name, addr, len(self._addresses), len(self._expected))
+            if self._addresses.keys() == self._expected:
+                self._all_registered.set()
+                ch = grpc.aio.insecure_channel(self._addresses[self._first_worker])
+                self._first_stub = pv2_grpc.DataPlaneStub(ch)
+                self._ready.set()
+                await self.start_send_loop()
         return pv2.RegisterWorkerResponse(ok=True, message="")
 
     async def GetNextWorker(
