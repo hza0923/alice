@@ -2,7 +2,7 @@ runtime:
   transport_mode: grpc
   grpc:
     use_streaming: false
-    rpc_timeout_ms: 3000
+    rpc_timeout_ms: 300000
     # Master GetNextWorker does not return until all workers registered; keep this comfortably above worst-case startup skew.
     registration_wait_timeout_ms: 600000
   queues:
