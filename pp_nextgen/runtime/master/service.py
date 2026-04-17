@@ -33,6 +33,7 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
         self._first_stub: Optional[pv2_grpc.DataPlaneStub] = None
         self._total_tokens_reported = 0
         self._register_lock = asyncio.Lock()
+        self._accept_new_tasks = True
 
     @property
     def latency_tracker(self) -> MasterLatencyTracker:
@@ -125,6 +126,9 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
     ) -> pv2.TaskSubmitResponse:
         await self._ready.wait()
         if request.is_end:
+            if not self._accept_new_tasks:
+                return pv2.TaskSubmitResponse(ok=True, message="pipeline stop already requested")
+            self._accept_new_tasks = False
             n = max(1, len(self._order))
             frame = pv2.Frame(
                 req_id="__pipeline_stop__",
@@ -137,7 +141,13 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
                 ring_remaining=n,
             )
             await self._send_queue.put(frame)
+            LOG.info("pipeline stop requested; reject subsequent new tasks")
             return pv2.TaskSubmitResponse(ok=True, message="")
+        if not self._accept_new_tasks:
+            return pv2.TaskSubmitResponse(
+                ok=False,
+                message="master is draining after pipeline-stop; new tasks are rejected",
+            )
         self._latency.mark_submit(request.req_id)
         frame = pv2.Frame(
             req_id=request.req_id,
