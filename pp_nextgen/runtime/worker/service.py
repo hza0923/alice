@@ -153,6 +153,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                 break
             await asyncio.sleep(0.2)
         await self._initialize_executor()
+        self._prewarm_model_layers()
         if self._is_first_worker:
             asyncio.create_task(self._task_processor_worker0())
         else:
@@ -169,6 +170,11 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         if inspect.isawaitable(ret):
             await ret
         LOG.info("executor %s initialization done", self._executor.__class__.__name__)
+
+    def _prewarm_model_layers(self) -> None:
+        """Build decode module chain during initialization to avoid first-request lazy cost."""
+        self._model.init_layers()
+        LOG.info("pipeline model modules prewarmed")
 
     def set_public_address(self, addr: str) -> None:
         self._public_addr = addr
@@ -380,7 +386,12 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
         if not frame.ring_return and int(frame.step_id) == 0:
             self._open_requests.add(frame.req_id)
-            self._journal.mark_ingress(frame.req_id)
+            self._journal.mark_ingress(
+                frame.req_id,
+                batch_size=int(frame.batch_size or 1),
+                context_len=int(frame.context_len),
+                target_len=int(frame.target_len),
+            )
 
         self._model.ensure_kv_session(
             frame.req_id,
