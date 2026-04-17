@@ -53,17 +53,28 @@ Outputs:
 ### 4) Runtime
 
 ```powershell
-python -m pp_nextgen.runtime.cli master --bind 0.0.0.0:50050 --pipeline-strategy outputs/scheduler/export/pipeline_strategy.json
+# master-3060 
+python -m pp_nextgen.runtime.cli master --pipeline-strategy outputs\scheduler\export\coarse-grained-bs32-len32\pipeline_strategy.json --bind 0.0.0.0:50050 
 ```
 
 ```powershell
-python -m pp_nextgen.runtime.cli worker --worker-name 3060_0 --bind 0.0.0.0:50051 --public-address 192.168.1.10:50051 --master 192.168.1.1:50050 --pipeline-strategy outputs/scheduler/export/pipeline_strategy.json --worker-strategy outputs/scheduler/export/workers/3060_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out outputs/runtime/logs/3060_0.metrics.json
+# worker-3060_0
+python -m pp_nextgen.runtime.cli worker --worker-name 3060_0 --master 127.0.0.1:50050 --pipeline-strategy outputs\scheduler\export\coarse-grained-bs32-len32\pipeline_strategy.json --worker-strategy outputs\scheduler\export\coarse-grained-bs32-len32\3060_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out outputs/runtime/logs/coarse-grained-bs32-len32/3060_0.metrics.json --runtime-config configs\runtime\runtime.example.yaml
+
+# worker-2080super_0
+python -m pp_nextgen.runtime.cli worker --worker-name 2080super_0 --master 192.168.31.237:50050 --pipeline-strategy outputs/scheduler/export/coarse-grained-bs32-len32/pipeline_strategy.json --worker-strategy outputs/scheduler/export/coarse-grained-bs32-len32/2080super_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out outputs/runtime/logs/coarse-grained-bs32-len32/2080super_0.metrics.json --runtime-config configs/runtime/runtime.example.yaml
+
+# worker-agx_0
+python -m pp_nextgen.runtime.cli worker --worker-name agx_0 --master 192.168.31.237:50050 --pipeline-strategy outputs/scheduler/export/coarse-grained-bs32-len32/pipeline_strategy.json --worker-strategy outputs/scheduler/export/coarse-grained-bs32-len32/agx_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out outputs/runtime/logs/coarse-grained-bs32-len32/agx_0.metrics.json --runtime-config configs/runtime/runtime.example.yaml
+
+# worker-tx2_0
+python -m pp_nextgen.runtime.cli worker --worker-name tx2_0 --master 192.168.31.237:50050 --pipeline-strategy outputs/scheduler/export/coarse-grained-bs32-len32/pipeline_strategy.json --worker-strategy outputs/scheduler/export/coarse-grained-bs32-len32/tx2_0.strategy.json --model-config configs/model/llama2_7b.yaml --metrics-out outputs/runtime/logs/coarse-grained-bs32-len32/tx2_0.metrics.json --runtime-config configs/runtime/runtime.example.yaml
 ```
 
 Submit one request:
 
 ```powershell
-python tools/runtime/submit_task_to_master.py --master 127.0.0.1:50050 --req-id demo-1 --batch-size 1 --context-len 128 --target-len 32
+python tools/runtime/submit_task_to_master.py --master 192.168.31.237:50050 --req-id demo-1 --batch-size 32 --context-len 32 --target-len 32
 ```
 
 ### 5) Simulation

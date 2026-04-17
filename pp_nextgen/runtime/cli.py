@@ -38,7 +38,7 @@ def _parse() -> argparse.Namespace:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     m = sub.add_parser("master", help="Run MasterControl (reads pipeline_strategy.json)")
-    m.add_argument("--bind", default="127.0.0.1:50050", help="Listen address")
+    m.add_argument("--bind", default="0.0.0.0:50050", help="Listen address")
     m.add_argument(
         "--pipeline-strategy",
         required=True,
@@ -53,7 +53,7 @@ def _parse() -> argparse.Namespace:
 
     w = sub.add_parser("worker", help="Run DataPlane worker")
     w.add_argument("--worker-name", required=True, help="e.g. 3060_0")
-    w.add_argument("--bind", default="127.0.0.1:50051", help="Listen address")
+    w.add_argument("--bind", default="0.0.0.0:50051", help="Listen address")
     w.add_argument(
         "--public-address",
         default=None,
