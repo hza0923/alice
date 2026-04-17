@@ -70,7 +70,7 @@ python -m pp_nextgen.runtime.cli worker --worker-name tx2_0 --master 192.168.31.
 Submit one request:
 
 ```powershell
-python tools/runtime/submit_task_to_master.py --master 192.168.31.237:50050 --batch-size 32 --context-len 32 --target-len 32 --req-id demo-1
+python tools/runtime/submit_task_to_master.py --master 192.168.31.237:50050 --batch-size 32 --context-len 32 --target-len 64 --req-id demo-1
 ```
 
 ### 5) Simulation

@@ -27,6 +27,8 @@ class RequestTrace:
     worker_name: str
     created_monotonic: float
     hops: List[HopRecord] = field(default_factory=list)
+    ingress_monotonic: Optional[float] = None
+    first_token_monotonic: Optional[float] = None
     finished_monotonic: Optional[float] = None
 
 
@@ -50,6 +52,16 @@ class RequestJournal:
         tr = self.ensure_req(req_id)
         tr.hops.append(hop)
 
+    def mark_ingress(self, req_id: str) -> None:
+        tr = self.ensure_req(req_id)
+        if tr.ingress_monotonic is None:
+            tr.ingress_monotonic = time.monotonic()
+
+    def mark_first_token(self, req_id: str) -> None:
+        tr = self.ensure_req(req_id)
+        if tr.first_token_monotonic is None:
+            tr.first_token_monotonic = time.monotonic()
+
     def mark_finished(self, req_id: str) -> None:
         tr = self.ensure_req(req_id)
         tr.finished_monotonic = time.monotonic()
@@ -65,7 +77,11 @@ class RequestJournal:
                 "req_id": tr.req_id,
                 "worker_name": tr.worker_name,
                 "created_monotonic": tr.created_monotonic,
+                "ingress_monotonic": tr.ingress_monotonic,
+                "first_token_monotonic": tr.first_token_monotonic,
                 "finished_monotonic": tr.finished_monotonic,
+                "ttft_ms": _delta_ms(tr.ingress_monotonic, tr.first_token_monotonic),
+                "e2e_ms": _delta_ms(tr.ingress_monotonic, tr.finished_monotonic),
                 "hops": [asdict(h) for h in tr.hops],
             }
         return out
@@ -83,9 +99,15 @@ class MasterLatencyTracker:
     def __init__(self) -> None:
         self._start: Dict[str, float] = {}
         self._records: Dict[str, Dict[str, float]] = {}
+        self._first_submit_ts: Optional[float] = None
+        self._pipeline_closed_ts: Optional[float] = None
+        self._total_tokens: int = 0
 
     def mark_submit(self, req_id: str) -> None:
-        self._start[req_id] = time.time()
+        ts = time.time()
+        self._start[req_id] = ts
+        if self._first_submit_ts is None:
+            self._first_submit_ts = ts
 
     def mark_finished(self, req_id: str) -> None:
         st = self._start.pop(req_id, None)
@@ -94,11 +116,39 @@ class MasterLatencyTracker:
         end = time.time()
         self._records[req_id] = {"start": st, "end": end, "latency_s": end - st}
 
+    def mark_pipeline_closed(self, total_tokens: int) -> None:
+        self._pipeline_closed_ts = time.time()
+        self._total_tokens = int(total_tokens)
+
     def to_serializable(self) -> Dict[str, Any]:
-        return {"schema_version": "master_latency.v1", "requests": dict(self._records)}
+        total_s = _delta_s(self._first_submit_ts, self._pipeline_closed_ts)
+        throughput = None if total_s is None or total_s <= 0 else float(self._total_tokens) / total_s
+        return {
+            "schema_version": "master_latency.v2",
+            "pipeline": {
+                "first_submit_ts": self._first_submit_ts,
+                "closed_ts": self._pipeline_closed_ts,
+                "working_time_s": total_s,
+                "total_tokens": self._total_tokens,
+                "throughput_tokens_per_s": throughput,
+            },
+            "requests": dict(self._records),
+        }
 
     def export_json(self, path: str | Path) -> None:
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("w", encoding="utf-8") as f:
             json.dump(self.to_serializable(), f, indent=2, ensure_ascii=False)
+
+
+def _delta_ms(start: Optional[float], end: Optional[float]) -> Optional[float]:
+    if start is None or end is None:
+        return None
+    return (end - start) * 1000.0
+
+
+def _delta_s(start: Optional[float], end: Optional[float]) -> Optional[float]:
+    if start is None or end is None:
+        return None
+    return end - start

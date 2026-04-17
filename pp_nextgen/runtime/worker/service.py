@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from typing import Any, Dict, Optional, Set, Tuple
@@ -151,12 +152,23 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                 LOG.info("next hop %s", nxt.next_worker_address)
                 break
             await asyncio.sleep(0.2)
+        await self._initialize_executor()
         if self._is_first_worker:
             asyncio.create_task(self._task_processor_worker0())
         else:
             asyncio.create_task(self._task_processor())
         asyncio.create_task(self._send_processor())
         return True
+
+    async def _initialize_executor(self) -> None:
+        init_fn = getattr(self._executor, "initialize", None)
+        if init_fn is None:
+            LOG.info("executor %s initialization skipped (no-op)", self._executor.__class__.__name__)
+            return
+        ret = init_fn()
+        if inspect.isawaitable(ret):
+            await ret
+        LOG.info("executor %s initialization done", self._executor.__class__.__name__)
 
     def set_public_address(self, addr: str) -> None:
         self._public_addr = addr
@@ -368,6 +380,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
         if not frame.ring_return and int(frame.step_id) == 0:
             self._open_requests.add(frame.req_id)
+            self._journal.mark_ingress(frame.req_id)
 
         self._model.ensure_kv_session(
             frame.req_id,
@@ -394,6 +407,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             self._active_reqs.add(frame.req_id)
             new_ctx = int(frame.context_len) + 1
             self._total_tokens += int(frame.batch_size or 1)
+            self._journal.mark_first_token(frame.req_id)
             done = new_ctx >= int(frame.target_len)
             out = _copy_frame(
                 frame,
@@ -476,6 +490,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         payload = b"x" * int(exp_bytes)
         new_ctx = int(frame.context_len) + 1
         self._total_tokens += int(frame.batch_size or 1)
+        self._journal.mark_first_token(frame.req_id)
         done = new_ctx >= int(frame.target_len)
         hop = HopRecord(
             step_id=int(frame.step_id),

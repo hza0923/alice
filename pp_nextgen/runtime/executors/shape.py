@@ -20,6 +20,10 @@ def _phase_name(frame: Any) -> str:
 class ShapeExecutor:
     """Runs `PipelineModel` forward then attributes wall time to compute."""
 
+    async def initialize(self) -> None:
+        # Reserved for future kernel/model warmup.
+        return
+
     async def run(
         self,
         frame: Any,

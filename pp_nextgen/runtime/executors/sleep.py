@@ -18,6 +18,10 @@ def _phase_name(frame: Any) -> str:
 
 
 class SleepExecutor:
+    async def initialize(self) -> None:
+        # Sleep executor has no runtime state to warm up.
+        return
+
     async def run(
         self,
         frame: Any,

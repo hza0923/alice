@@ -163,6 +163,7 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
         self, request: pv2.PipelineCompleteReport, context: grpc.aio.ServicerContext
     ) -> pv2.Ack:
         self._total_tokens_reported = int(request.total_tokens)
+        self._latency.mark_pipeline_closed(self._total_tokens_reported)
         LOG.info("pipeline complete total_tokens=%s", request.total_tokens)
         await self._notify_shutdown()
         self._done.set()

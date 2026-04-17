@@ -71,7 +71,6 @@ def parse_args() -> argparse.Namespace:
 
 
 async def _client_submit(master_addr: str, context_len: int, target_len: int, batch_size: int) -> None:
-    await asyncio.sleep(0.8)
     ch = grpc.aio.insecure_channel(master_addr)
     stub = pv2_grpc.MasterControlStub(ch)
     await stub.SubmitTask(
@@ -136,6 +135,7 @@ async def main_async() -> None:
         workers.append(wr)
 
     await asyncio.gather(*(wr.connect_master() for wr in workers))
+    logging.info("all workers connected + executor initialization done, start submitting requests")
 
     asyncio.create_task(
         _client_submit(
