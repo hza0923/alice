@@ -1,6 +1,6 @@
 {
   "schema_version": "pipeline_strategy.v2",
-  "generated_at": "2026-04-14T07:51:05Z",
+  "generated_at": "2026-04-17T08:49:42Z",
   "model": {
     "name": "llama2-7b",
     "num_layers": 32,
@@ -155,6 +155,48 @@
               "unit": "bytes",
               "expr": "c0"
             }
+          },
+          "comm_time_ms": {
+            "head": {
+              "form": "constant",
+              "c0": 2.62144,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "head": {
+              "form": "linear",
+              "c0": 3.8808589999999996,
+              "c1": 0.0001373291015625,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            },
+            "tail": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
           }
         },
         "prefill": {
@@ -195,6 +237,26 @@
               "c2": 0.0,
               "x": "seq_len",
               "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "head": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2.62144,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
               "expr": "c0"
             }
           }
@@ -281,6 +343,29 @@
               "unit": "bytes",
               "expr": "c0"
             }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "constant",
+              "c0": 2.62144,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "single": {
+              "form": "linear",
+              "c0": 3.0156240000000003,
+              "c1": 0.0001220703125,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
           }
         },
         "prefill": {
@@ -303,6 +388,17 @@
               "c2": 0.0,
               "x": "seq_len",
               "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2.62144,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
               "expr": "c0 + c1 * x"
             }
           }
@@ -348,13 +444,13 @@
         },
         "prefill": {
           "single_model": {
-            "base_time": 0,
+            "base_time": 0.0,
             "increase_time": 5.179640560319063,
             "quadratic_time": 0.0008941508730075193,
-            "a": 0,
+            "a": 0.0,
             "b": 5.179640560319063,
             "c": 0.0008941508730075193,
-            "comp_time_ms": 148.9434657735854,
+            "comp_time_ms": 166.6641084241697,
             "base_size": 0,
             "inc_size": 262144,
             "quadratic_size": 0,
@@ -396,13 +492,36 @@
               "unit": "bytes",
               "expr": "c0"
             }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "constant",
+              "c0": 2.62144,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "single": {
+              "form": "linear",
+              "c0": 5.654295000000001,
+              "c1": 0.0002288818359375,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
           }
         },
         "prefill": {
           "time_ms": {
             "single": {
               "form": "quadratic",
-              "c0": 0,
+              "c0": 0.0,
               "c1": 5.179640560319063,
               "c2": 0.0008941508730075193,
               "x": "seq_len",
@@ -418,6 +537,17 @@
               "c2": 0.0,
               "x": "seq_len",
               "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2.62144,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
               "expr": "c0 + c1 * x"
             }
           }

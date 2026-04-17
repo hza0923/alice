@@ -172,6 +172,11 @@ def expected_comm_ms(
         v = _linear_eval(model, x)
         if v is not None:
             return float(v)
+    # Backward-compat fallback for legacy exported strategies:
+    # comm_time_ms may be a stage-level scalar instead of phase/branch model.
+    legacy = stage.get("comm_time_ms")
+    if isinstance(legacy, (int, float)):
+        return float(legacy)
     raise ValueError(f"missing stage_models.{phase_name}.comm_time_ms for branch={branch}")
 
 
