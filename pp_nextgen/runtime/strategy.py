@@ -11,12 +11,18 @@ from pp_nextgen.config_loader import load_yaml
 
 def load_pipeline_strategy(path: str | Path) -> Dict[str, Any]:
     with Path(path).open("r", encoding="utf-8") as f:
-        return json.load(f)
+        doc = json.load(f)
+    if str(doc.get("schema_version", "")) != "pipeline_strategy.v2":
+        raise ValueError("pipeline strategy must be pipeline_strategy.v2")
+    return doc
 
 
 def load_worker_strategy(path: str | Path) -> Dict[str, Any]:
     with Path(path).open("r", encoding="utf-8") as f:
-        return json.load(f)
+        doc = json.load(f)
+    if str(doc.get("schema_version", "")) != "worker_strategy.v1":
+        raise ValueError("worker strategy must be worker_strategy.v1")
+    return doc
 
 
 def worker_strategy_filename(worker_name: str) -> str:
@@ -73,11 +79,41 @@ def model_block_from_pipeline(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _linear_eval(model: Optional[Dict[str, Any]], x: float) -> Optional[float]:
-    if not model or model.get("form") != "linear":
+    if not model:
         return None
-    base = float(model.get("base", 0.0))
-    inc = float(model.get("inc", 0.0))
-    return base + inc * x
+    form = str(model.get("form", "")).lower()
+    if form == "constant":
+        return float(model.get("c0", 0.0))
+    if form == "quadratic":
+        c0 = float(model.get("c0", 0.0))
+        c1 = float(model.get("c1", 0.0))
+        c2 = float(model.get("c2", 0.0))
+        return c0 + c1 * x + c2 * x * x
+    if form == "linear":
+        c0 = float(model.get("c0", 0.0))
+        c1 = float(model.get("c1", 0.0))
+        return c0 + c1 * x
+    return None
+
+
+def _select_branch_model(stage: Dict[str, Any], phase_name: str, model_key: str, branch: str) -> Optional[Dict[str, Any]]:
+    sm = stage.get("stage_models") or {}
+    phase = sm.get(phase_name) or {}
+    if not isinstance(phase, dict):
+        return None
+    raw = phase.get(model_key)
+    if isinstance(raw, dict):
+        b = (branch or "single").strip().lower()
+        return raw.get(b) or raw.get("single")
+    return raw if isinstance(raw, dict) else None
+
+
+def stage_has_worker0_head_tail(stage: Dict[str, Any]) -> bool:
+    decode_tm = _select_branch_model(stage, "decode", "time_ms", "head")
+    decode_tail = _select_branch_model(stage, "decode", "time_ms", "tail")
+    pre_tm = _select_branch_model(stage, "prefill", "time_ms", "head")
+    pre_tail = _select_branch_model(stage, "prefill", "time_ms", "tail")
+    return all(isinstance(x, dict) for x in (decode_tm, decode_tail, pre_tm, pre_tail))
 
 
 def expected_compute_ms(
@@ -85,21 +121,21 @@ def expected_compute_ms(
     phase_name: str,
     context_len: int,
     batch_size: int,
+    branch: str = "single",
 ) -> float:
     sm = stage.get("stage_models") or {}
     phase = sm.get(phase_name) or {}
-    tm = phase.get("time_ms") if isinstance(phase, dict) else None
+    tm = None
+    if isinstance(phase, dict):
+        tms = phase.get("time_ms")
+        if isinstance(tms, dict):
+            b = (branch or "single").strip().lower()
+            tm = tms.get(b) or tms.get("single")
     x = float(context_len)
     v = _linear_eval(tm, x)
     if v is not None:
-        return float(v)
-    sp = stage.get("stage_params") or {}
-    if phase_name == "prefill":
-        return float(sp.get("comp_time_ms", 0.0))
-    # Legacy-style fallback (see grpc_heterogeneous_pipeline/3060/role/worker.py)
-    base_time = float(sp.get("base_time", 0.0))
-    inc_time = float(sp.get("increase_time", 0.0))
-    return base_time + inc_time * float(batch_size) * x
+        return max(0.0, float(v))
+    raise ValueError(f"missing stage_models.{phase_name}.time_ms for branch={branch}")
 
 
 def expected_comm_bytes(
@@ -107,29 +143,52 @@ def expected_comm_bytes(
     phase_name: str,
     context_len: int,
     batch_size: int,
+    branch: str = "single",
 ) -> int:
     sm = stage.get("stage_models") or {}
     phase = sm.get(phase_name) or {}
-    cb = phase.get("comm_bytes") if isinstance(phase, dict) else None
+    cb = None
+    if isinstance(phase, dict):
+        cbs = phase.get("comm_bytes")
+        if isinstance(cbs, dict):
+            b = (branch or "single").strip().lower()
+            cb = cbs.get(b) or cbs.get("single")
     x = float(context_len)
     v = _linear_eval(cb, x)
     if v is not None:
         return max(0, int(round(v)))
-    sp = stage.get("stage_params") or {}
-    if phase_name == "prefill":
-        raw = stage.get("comm_bytes_to_next")
-        if raw is not None:
-            return max(0, int(round(float(raw))))
-    base_size = float(sp.get("base_size", 0.0))
-    inc_size = float(sp.get("inc_size", 0.0))
-    return max(0, int(round(base_size + inc_size * float(batch_size) * x)))
+    raise ValueError(f"missing stage_models.{phase_name}.comm_bytes for branch={branch}")
 
 
-def expected_comm_ms(stage: Dict[str, Any]) -> float:
-    v = stage.get("comm_time_ms")
-    if v is not None:
-        return float(v)
-    return 0.0
+def expected_comm_ms(
+    stage: Dict[str, Any],
+    phase_name: str = "decode",
+    context_len: int = 0,
+    branch: str = "single",
+) -> float:
+    model = _select_branch_model(stage, phase_name, "comm_time_ms", branch)
+    if model:
+        x = float(context_len)
+        v = _linear_eval(model, x)
+        if v is not None:
+            return float(v)
+    raise ValueError(f"missing stage_models.{phase_name}.comm_time_ms for branch={branch}")
+
+
+def expected_decode_memory_gb(
+    stage: Dict[str, Any],
+    context_len: int,
+    batch_size: int,
+    branch: str = "single",
+) -> float:
+    model = _select_branch_model(stage, "decode", "memory_gb", branch)
+    if isinstance(model, dict):
+        c0 = float(model.get("c0", 0.0))
+        c1 = float(model.get("c1", 0.0))
+        # decode-only memory contract: c0 + c1 * seq_len * batch_size.
+        return c0 + c1 * float(context_len) * float(batch_size)
+
+    raise ValueError(f"missing stage_models.decode.memory_gb for branch={branch}")
 
 
 def load_model_yaml(path: str | Path) -> Dict[str, Any]:
@@ -188,24 +247,9 @@ def split_head_tail_modules_from_execution_plan(
     Resolve head/tail lists from worker JSON.
 
     New export uses head_ordered_modules + tail_ordered_modules only.
-    Legacy files may still have ordered_modules; for the first pipeline worker only,
-    apply the same designated_device / designated_tail_n rule as the exporter.
     """
     head = list(exec_plan.get("head_ordered_modules") or [])
     tail = list(exec_plan.get("tail_ordered_modules") or [])
-    if head or tail:
-        return head, tail
-
-    legacy = list(exec_plan.get("ordered_modules") or [])
-    if not legacy:
-        return [], []
-    if not is_first_worker:
-        return legacy, []
-
-    si = (pipeline_doc or {}).get("schedule_input") or {}
-    return head_tail_modules_for_worker(
-        worker_name,
-        legacy,
-        str(si.get("designated_device") or ""),
-        int(si.get("designated_tail_n") or 0),
-    )
+    if not head and not tail:
+        raise ValueError("worker strategy must provide head_ordered_modules/tail_ordered_modules")
+    return head, tail

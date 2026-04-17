@@ -27,10 +27,11 @@ class SleepExecutor:
         branch: str = "single",
     ) -> Tuple[float, float]:
         _ = merged_model
-        _ = branch
         _ = model
         ph = _phase_name(frame)
-        exp_ms = expected_compute_ms(stage, ph, int(frame.context_len), int(frame.batch_size or 1))
+        exp_ms = expected_compute_ms(
+            stage, ph, int(frame.context_len), int(frame.batch_size or 1), branch=branch
+        )
         # Sleep path keeps wall time = profiled delay; full numpy module chain is in shape_executor.
         actual_ms = await sleep_seconds_async(exp_ms / 1000.0)
         return exp_ms, actual_ms

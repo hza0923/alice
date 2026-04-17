@@ -1,0 +1,2 @@
+# Normalize text files to LF in the repo (avoids Windows CRLF churn and git add warnings).
+* text=auto eol=lf

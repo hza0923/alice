@@ -1,0 +1,122 @@
+{
+  "timestamp": "2026-04-13 19:22:27",
+  "model": "llama2-7b",
+  "device": "smoke_cpu",
+  "device_memory_gb": 0.0,
+  "test_configurations": [
+    {
+      "batch_size": 1,
+      "p_max_len": 25,
+      "d_max_len": 50,
+      "step": 25,
+      "components": {
+        "embed_tokens": {
+          "component": "embed_tokens",
+          "weight_size_gb": 0.244141,
+          "kvcache_size_gb": 0.0,
+          "prefill_times": {
+            "1": 6.83379999999989
+          },
+          "decode_times": {
+            "average": 0.032000000000032
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "qkv_rope": {
+          "component": "qkv_rope",
+          "weight_size_gb": 0.09375,
+          "kvcache_size_gb": 0.0,
+          "prefill_times": {
+            "1": 30.56630000000027
+          },
+          "decode_times": {
+            "average": 3.6643000000000647
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "attn_qk": {
+          "component": "attn_qk",
+          "weight_size_gb": 0.0,
+          "kvcache_size_gb": 0.000381,
+          "prefill_times": {
+            "1": 2.107500000000151
+          },
+          "decode_times": {
+            "1": 0.06590000000006313,
+            "26": 1.1562000000004957
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "attn_av": {
+          "component": "attn_av",
+          "weight_size_gb": 0.0,
+          "kvcache_size_gb": 0.000381,
+          "prefill_times": {
+            "1": 0.1576000000005351
+          },
+          "decode_times": {
+            "1": 0.06929999999982783,
+            "26": 0.5598999999998355
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "attn_wo": {
+          "component": "attn_wo",
+          "weight_size_gb": 0.03125,
+          "kvcache_size_gb": 0.0,
+          "prefill_times": {
+            "1": 1.3344999999995721
+          },
+          "decode_times": {
+            "average": 1.043500000000197
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "up_proj": {
+          "component": "mlp_up_proj",
+          "weight_size_gb": 0.167969,
+          "kvcache_size_gb": 0.0,
+          "prefill_times": {
+            "1": 11.952299999999916
+          },
+          "decode_times": {
+            "average": 5.918850000000475
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "down_proj": {
+          "component": "mlp_down_proj",
+          "weight_size_gb": 0.083984,
+          "kvcache_size_gb": 0.0,
+          "prefill_times": {
+            "1": 2.362999999999005
+          },
+          "decode_times": {
+            "average": 2.4420499999999734
+          },
+          "status": "completed",
+          "error_info": null
+        },
+        "lm_head": {
+          "component": "lm_head",
+          "weight_size_gb": 0.244141,
+          "kvcache_size_gb": 0.0,
+          "prefill_times": {
+            "1": 6.507700000000227
+          },
+          "decode_times": {
+            "average": 7.730450000000388
+          },
+          "status": "completed",
+          "error_info": null
+        }
+      }
+    }
+  ]
+}

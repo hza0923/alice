@@ -8,9 +8,7 @@ device_group:
 designated_device: "3060"
 
 network_bandwidth_mbps:
-  default: 10000.0
-  "3060-2080super": 1000.0
-  "2080super-3060": 1000.0
+  default: 800.0
 
 # Optional node metadata for runtime (not read by the solver today).
 # nodes:
@@ -22,11 +20,11 @@ network_bandwidth_mbps:
 #     address: 192.168.1.11:50051
 
 solve:
-  registry_path: C:\Users\84538\Desktop\实验室\202505-~\LLM学习\grpc_heterogeneous_pipeline_nextgen\profiling\artifacts\registry\device_registry.v3.json
-  model_config: C:\Users\84538\Desktop\实验室\202505-~\LLM学习\grpc_heterogeneous_pipeline_nextgen\configs\model\llama2_7b.yaml
+  registry_path: outputs\profiling\artifacts\registry\device_registry.v3.json
+  model_config: configs\model\llama2_7b.yaml
   batch_size: 32
-  target_seq_len: 32
+  target_seq_len: 256
   prefer_bs: 32
-  use_fine_grained: true
+  use_fine_grained: false
   tail_candidates: [1, 2, 3, 4, 5, 6, 7]
-  out_dir: scheduler/export
+  out_dir: outputs/scheduler/export/coarse-grained-bs32-len256

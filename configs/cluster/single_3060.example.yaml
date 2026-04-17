@@ -8,7 +8,7 @@ network_bandwidth_mbps:
   default: 10000.0
 
 solve:
-  registry_path: profiling/artifacts/registry/device_registry.v3.json
+  registry_path: outputs/profiling/registry/device_registry.v3.json
   model_config: configs/model/llama2_7b.yaml
   batch_size: 1
   # 较长上下文下 KV 线性项会迅速吃满显存；示例用较短 seq 保证单机多卡也可行。
@@ -16,4 +16,4 @@ solve:
   prefer_bs: 1
   use_fine_grained: true
   tail_candidates: [1, 2, 3, 4, 5, 6, 7]
-  out_dir: scheduler/export
+  out_dir: outputs/scheduler/export

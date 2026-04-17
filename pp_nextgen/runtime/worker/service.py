@@ -305,9 +305,14 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             frame, self._stage, self._merged_model, self._model, branch="single"
         )
         exp_bytes = expected_comm_bytes(
-            self._stage, ph, int(frame.context_len), int(frame.batch_size or 1)
+            self._stage, ph, int(frame.context_len), int(frame.batch_size or 1), branch="single"
         )
-        exp_cm = expected_comm_ms(self._stage)
+        exp_cm = expected_comm_ms(
+            self._stage,
+            phase_name=ph,
+            context_len=int(frame.context_len),
+            branch="single",
+        )
         payload = b"x" * int(exp_bytes)
         out = self._next_frame_towards_peer(
             _copy_frame(
@@ -375,9 +380,14 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             frame, self._stage, self._merged_model, self._model, branch=branch
         )
         exp_bytes = expected_comm_bytes(
-            self._stage, ph, int(frame.context_len), int(frame.batch_size or 1)
+            self._stage, ph, int(frame.context_len), int(frame.batch_size or 1), branch=branch
         )
-        exp_cm = expected_comm_ms(self._stage)
+        exp_cm = expected_comm_ms(
+            self._stage,
+            phase_name=ph,
+            context_len=int(frame.context_len),
+            branch=branch,
+        )
         payload = b"x" * int(exp_bytes)
 
         if not self._model.has_tail:
@@ -455,9 +465,14 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             frame, self._stage, self._merged_model, self._model, branch="tail"
         )
         exp_bytes = expected_comm_bytes(
-            self._stage, ph, int(frame.context_len), int(frame.batch_size or 1)
+            self._stage, ph, int(frame.context_len), int(frame.batch_size or 1), branch="tail"
         )
-        exp_cm = expected_comm_ms(self._stage)
+        exp_cm = expected_comm_ms(
+            self._stage,
+            phase_name=ph,
+            context_len=int(frame.context_len),
+            branch="tail",
+        )
         payload = b"x" * int(exp_bytes)
         new_ctx = int(frame.context_len) + 1
         self._total_tokens += int(frame.batch_size or 1)

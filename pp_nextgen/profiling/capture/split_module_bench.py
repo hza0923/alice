@@ -40,7 +40,7 @@ def configure_runtime(
 
 def _empty_cache_if_cuda() -> None:
     if device.type == "cuda":
-        _empty_cache_if_cuda()
+        torch.cuda.empty_cache()
 
 # ==================== 配置类 ====================
 @dataclass

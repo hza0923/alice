@@ -30,7 +30,9 @@ class ShapeExecutor:
     ) -> Tuple[float, float]:
         _ = merged_model
         ph = _phase_name(frame)
-        exp_ms = expected_compute_ms(stage, ph, int(frame.context_len), int(frame.batch_size or 1))
+        exp_ms = expected_compute_ms(
+            stage, ph, int(frame.context_len), int(frame.batch_size or 1), branch=branch
+        )
         t0 = time.perf_counter()
         rid = frame.req_id
         ctx = int(frame.context_len)

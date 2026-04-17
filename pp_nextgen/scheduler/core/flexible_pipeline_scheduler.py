@@ -114,18 +114,42 @@ class FlexiblePipelineScheduler:
             return layer_name.replace("output_embed_", "")
         return layer_name.split("_", 1)[1]
 
-    def _get_layer_latency(self, device_type: str, layer_name: str, seq_len: int, bs: int) -> float:
+    def _eval_poly(self, model: Dict[str, Any], x: float) -> float:
+        form = str(model.get("form", "linear")).lower()
+        c0 = float(model.get("c0", 0.0))
+        c1 = float(model.get("c1", 0.0))
+        c2 = float(model.get("c2", 0.0))
+        if form == "constant":
+            return c0
+        if form == "quadratic":
+            return c0 + c1 * x + c2 * x * x
+        return c0 + c1 * x
+
+    def _module_time_model(self, device_type: str, module_name: str, phase: str) -> Dict[str, Any]:
+        params = self.device_perf[device_type]["modules"][module_name]
+        m = params.get(phase) or params.get("decode") or {}
+        return {
+            "form": str(m.get("form", "linear")).lower(),
+            "c0": float(m.get("c0", 0.0)),
+            "c1": float(m.get("c1", 0.0)),
+            "c2": float(m.get("c2", 0.0)),
+            "x": str(m.get("x", "seq_len")),
+        }
+
+    def _get_layer_latency(
+        self, device_type: str, layer_name: str, seq_len: int, bs: int, phase: str = "decode"
+    ) -> float:
         module_name = self._get_module_name(layer_name)
         if module_name != "decoder_layer":
-            params = self.device_perf[device_type]["modules"][module_name]
-            return float(params["base"]) + float(params["increase"]) * float(seq_len)
+            model = self._module_time_model(device_type, module_name, phase)
+            return self._eval_poly(model, float(seq_len))
         total = 0.0
         for m in self._decoder_modules:
-            params = self.device_perf[device_type]["modules"][m]
-            total += float(params["base"]) + float(params["increase"]) * float(seq_len)
+            model = self._module_time_model(device_type, m, phase)
+            total += self._eval_poly(model, float(seq_len))
         return total
 
-    def _get_comm_model_bytes(self, module_name: str, bs: int) -> Tuple[int, int]:
+    def _get_comm_model_bytes(self, module_name: str, bs: int, phase: str) -> Tuple[int, int, int]:
         if module_name == "decoder_layer":
             module_name = "down_projection"
 
@@ -158,13 +182,22 @@ class FlexiblePipelineScheduler:
             base_elems = hidden_size
 
         bs_val = int(bs)
-        base_bytes = int(base_elems) * self.dtype_bytes * bs_val
-        inc_bytes = int(inc_elems) * self.dtype_bytes * bs_val
-        return base_bytes, inc_bytes
+        if phase == "prefill":
+            if module_name == "lm_head":
+                c0 = int(base_elems) * self.dtype_bytes * bs_val
+                return c0, 0, 0
+            # Prefill transfers full-sequence outputs: c0 + c1*x + c2*x^2 where x=seq_len.
+            c0 = 0
+            c1 = int(base_elems) * self.dtype_bytes * bs_val
+            c2 = int(inc_elems) * self.dtype_bytes * bs_val
+            return c0, c1, c2
+        # Decode transfers single-token outputs: c0 + c1*x where x=context_len.
+        c0 = int(base_elems) * self.dtype_bytes * bs_val
+        c1 = int(inc_elems) * self.dtype_bytes * bs_val
+        return c0, c1, 0
 
-    def _get_comm_bytes(self, module_name: str, bs: int, target_len: int) -> int:
-        base_b, inc_b = self._get_comm_model_bytes(module_name, bs)
-        return int(base_b + inc_b * int(target_len))
+    def _eval_comm_bytes(self, c0: int, c1: int, c2: int, x: int) -> int:
+        return int(c0 + c1 * int(x) + c2 * int(x) * int(x))
 
     def _get_comm_time_ms(
         self,
@@ -173,10 +206,12 @@ class FlexiblePipelineScheduler:
         prev_layer_idx: int,
         bs: int,
         target_len: int,
+        phase: str = "decode",
     ) -> float:
         prev_layer_name = self.layer_names[prev_layer_idx]
         module_name = self._get_module_name(prev_layer_name)
-        comm_bytes = self._get_comm_bytes(module_name, bs, target_len)
+        c0, c1, c2 = self._get_comm_model_bytes(module_name, bs, phase)
+        comm_bytes = self._eval_comm_bytes(c0, c1, c2, target_len)
         bandwidth_mbps = self._bandwidth_mbps(prev_dev_type, curr_dev_type)
         bandwidth_bytes_per_sec = bandwidth_mbps * 1e6 / 8
         if bandwidth_bytes_per_sec == 0:
@@ -190,10 +225,13 @@ class FlexiblePipelineScheduler:
         def _get_module_mem(module_name: str) -> float:
             mm = self.model_cfg["module_memory_gb"].get(module_name, 0)
             if isinstance(mm, dict):
-                value = float(mm.get("base", 0.0)) + float(mm.get("inc", 0.0)) * float(seq_len)
-                # print(f"module_name: {module_name} mm: {value}")
+                base = float(mm.get("base", 0.0))
+                kv_per_token = float(mm.get("kv_per_token_gb", 0.0))
+                if kv_per_token > 0.0:
+                    value = base + kv_per_token * float(seq_len) * float(bs)
+                else:
+                    value = base + float(mm.get("inc", 0.0)) * float(seq_len)
                 return value
-            # print(f"module_name: {module_name} mm: {mm}")
             return float(mm)
 
         module_name = self._get_module_name(layer_name)
@@ -320,16 +358,78 @@ class FlexiblePipelineScheduler:
             return list(self._decoder_modules)
         return [module_name]
 
-    def _get_stage_time_params(self, device_type: str, layer_indices: List[int]) -> Tuple[float, float]:
-        stage_base_time = 0.0
-        stage_inc_time = 0.0
+    def _get_stage_time_params(
+        self, device_type: str, layer_indices: List[int], phase: str
+    ) -> Tuple[float, float, float]:
+        c0 = 0.0
+        c1 = 0.0
+        c2 = 0.0
         for layer_idx in layer_indices:
             layer_name = self.layer_names[layer_idx]
             for m in self._iter_effective_modules_for_layer(layer_name):
-                params = self.device_perf[device_type]["modules"][m]
-                stage_base_time += float(params["base"])
-                stage_inc_time += float(params["increase"])
-        return stage_base_time, stage_inc_time
+                model = self._module_time_model(device_type, m, phase)
+                c0 += float(model.get("c0", 0.0))
+                c1 += float(model.get("c1", 0.0))
+                c2 += float(model.get("c2", 0.0))
+        return c0, c1, c2
+
+    def _make_model_params(
+        self,
+        *,
+        time_c0: float,
+        time_c1: float,
+        time_c2: float,
+        size_c0: int,
+        size_c1: int,
+        size_c2: int,
+        target_seq_len: int,
+    ) -> Dict[str, Any]:
+        return {
+            "base_time": float(time_c0),
+            "increase_time": float(time_c1),
+            "quadratic_time": float(time_c2),
+            "a": float(time_c0),
+            "b": float(time_c1),
+            "c": float(time_c2),
+            "comp_time_ms": float(time_c0 + time_c1 * target_seq_len + time_c2 * target_seq_len * target_seq_len),
+            "base_size": int(size_c0),
+            "inc_size": int(size_c1),
+            "quadratic_size": int(size_c2),
+            "size_a": int(size_c0),
+            "size_b": int(size_c1),
+            "size_c": int(size_c2),
+        }
+
+    def _poly_doc(self, c0: float, c1: float, c2: float, *, x: str, unit: str) -> Dict[str, Any]:
+        if abs(float(c2)) > 1e-18:
+            return {
+                "form": "quadratic",
+                "c0": float(c0),
+                "c1": float(c1),
+                "c2": float(c2),
+                "x": x,
+                "unit": unit,
+                "expr": "c0 + c1 * x + c2 * x^2",
+            }
+        if abs(float(c1)) > 1e-18:
+            return {
+                "form": "linear",
+                "c0": float(c0),
+                "c1": float(c1),
+                "c2": 0.0,
+                "x": x,
+                "unit": unit,
+                "expr": "c0 + c1 * x",
+            }
+        return {
+            "form": "constant",
+            "c0": float(c0),
+            "c1": 0.0,
+            "c2": 0.0,
+            "x": x,
+            "unit": unit,
+            "expr": "c0",
+        }
 
     def _build_strategy_file(self, allocation: Dict[str, Any], tbt: float, bs: int, target_seq_len: int) -> Dict[str, Any]:
         flat_stages: List[Dict[str, Any]] = []
@@ -349,8 +449,11 @@ class FlexiblePipelineScheduler:
             layer_indices = stage_info["layers"]
             device_type = worker_name.split("_")[0]
             module_names = [self.layer_names[idx] for idx in layer_indices]
-            stage_base_time, stage_inc_time = self._get_stage_time_params(device_type, layer_indices)
-            comp_time_ms = stage_base_time + stage_inc_time * target_seq_len
+            d_c0, d_c1, d_c2 = self._get_stage_time_params(device_type, layer_indices, phase="decode")
+            p_c0, p_c1, p_c2 = self._get_stage_time_params(device_type, layer_indices, phase="prefill")
+            d_c0 = max(0.0, float(d_c0))
+            p_c0 = max(0.0, float(p_c0))
+            comp_time_ms = d_c0 + d_c1 * target_seq_len + d_c2 * target_seq_len * target_seq_len
 
             if i < len(sorted_stages) - 1:
                 next_worker_name = sorted_stages[i + 1]["worker_name"]
@@ -364,20 +467,121 @@ class FlexiblePipelineScheduler:
                 is_last_worker = True
 
             last_module_name = self._get_module_name(self.layer_names[send_layer_idx])
-            comm_base_bytes, comm_inc_bytes = self._get_comm_model_bytes(last_module_name, bs)
-            comm_bytes_to_next = int(comm_base_bytes + comm_inc_bytes * int(target_seq_len))
+            d_s0, d_s1, d_s2 = self._get_comm_model_bytes(last_module_name, bs, phase="decode")
+            p_s0, p_s1, p_s2 = self._get_comm_model_bytes(last_module_name, bs, phase="prefill")
+            comm_bytes_to_next = self._eval_comm_bytes(d_s0, d_s1, d_s2, target_seq_len)
             comm_time_ms = self._get_comm_time_ms(device_type, next_device_type, send_layer_idx, bs, target_seq_len)
+            bw_mbps = self._bandwidth_mbps(device_type, next_device_type)
+            bw_bytes_per_sec = max(1e-12, bw_mbps * 1e6 / 8)
+            comm_scale = 1000.0 / bw_bytes_per_sec
+            d_t0, d_t1, d_t2 = d_s0 * comm_scale, d_s1 * comm_scale, d_s2 * comm_scale
+            p_t0, p_t1, p_t2 = p_s0 * comm_scale, p_s1 * comm_scale, p_s2 * comm_scale
+            d_mem_c0 = 0.0
+            d_mem_kv_per_token = 0.0
+            for layer_idx in layer_indices:
+                layer_name = self.layer_names[layer_idx]
+                for m in self._iter_effective_modules_for_layer(layer_name):
+                    mm = self.model_cfg["module_memory_gb"].get(m, 0.0)
+                    if isinstance(mm, dict):
+                        d_mem_c0 += float(mm.get("base", 0.0))
+                        d_mem_kv_per_token += float(mm.get("kv_per_token_gb", 0.0))
+                    else:
+                        d_mem_c0 += float(mm)
+
+            decode_default_model = self._make_model_params(
+                time_c0=d_c0,
+                time_c1=d_c1,
+                time_c2=d_c2,
+                size_c0=d_s0,
+                size_c1=d_s1,
+                size_c2=d_s2,
+                target_seq_len=target_seq_len,
+            )
+            prefill_default_model = self._make_model_params(
+                time_c0=p_c0,
+                time_c1=p_c1,
+                time_c2=p_c2,
+                size_c0=p_s0,
+                size_c1=p_s1,
+                size_c2=p_s2,
+                target_seq_len=target_seq_len,
+            )
+            decode_phase: Dict[str, Any] = {"single_model": dict(decode_default_model)}
+            prefill_phase: Dict[str, Any] = {"single_model": dict(prefill_default_model)}
+
+            # The designated worker0 runs both first-pass head and ring-return tail.
+            if worker_name == f"{self.designated_device}_0":
+                tail_layer_start = max(0, self.num_layers - self.designated_tail_n)
+                head_layers = [idx for idx in layer_indices if idx < tail_layer_start]
+                tail_layers = [idx for idx in layer_indices if idx >= tail_layer_start]
+                if head_layers and tail_layers:
+                    h_d0, h_d1, h_d2 = self._get_stage_time_params(device_type, head_layers, phase="decode")
+                    t_d0, t_d1, t_d2 = self._get_stage_time_params(device_type, tail_layers, phase="decode")
+                    h_p0, h_p1, h_p2 = self._get_stage_time_params(device_type, head_layers, phase="prefill")
+                    t_p0, t_p1, t_p2 = self._get_stage_time_params(device_type, tail_layers, phase="prefill")
+                    h_d0 = max(0.0, float(h_d0))
+                    t_d0 = max(0.0, float(t_d0))
+                    h_p0 = max(0.0, float(h_p0))
+                    t_p0 = max(0.0, float(t_p0))
+                    # Head sends to next worker; tail loops locally on worker0.
+                    head_send_layer = max(head_layers)
+                    head_mod_name = self._get_module_name(self.layer_names[head_send_layer])
+                    h_d_s0, h_d_s1, h_d_s2 = self._get_comm_model_bytes(head_mod_name, bs, phase="decode")
+                    h_p_s0, h_p_s1, h_p_s2 = self._get_comm_model_bytes(head_mod_name, bs, phase="prefill")
+                    decode_phase = {
+                        "head_model": self._make_model_params(
+                            time_c0=h_d0,
+                            time_c1=h_d1,
+                            time_c2=h_d2,
+                            size_c0=h_d_s0,
+                            size_c1=h_d_s1,
+                            size_c2=h_d_s2,
+                            target_seq_len=target_seq_len,
+                        ),
+                        "tail_model": self._make_model_params(
+                            time_c0=t_d0,
+                            time_c1=t_d1,
+                            time_c2=t_d2,
+                            size_c0=0,
+                            size_c1=0,
+                            size_c2=0,
+                            target_seq_len=target_seq_len,
+                        ),
+                    }
+                    prefill_phase = {
+                        "head_model": self._make_model_params(
+                            time_c0=h_p0,
+                            time_c1=h_p1,
+                            time_c2=h_p2,
+                            size_c0=h_p_s0,
+                            size_c1=h_p_s1,
+                            size_c2=h_p_s2,
+                            target_seq_len=target_seq_len,
+                        ),
+                        "tail_model": self._make_model_params(
+                            time_c0=t_p0,
+                            time_c1=t_p1,
+                            time_c2=t_p2,
+                            size_c0=0,
+                            size_c1=0,
+                            size_c2=0,
+                            target_seq_len=target_seq_len,
+                        ),
+                    }
 
             pipeline_stages.append(
                 {
                     "worker_name": worker_name,
                     "modules_to_execute": module_names,
                     "stage_params": {
-                        "base_time": stage_base_time,
-                        "increase_time": stage_inc_time,
+                        "decode": decode_phase,
+                        "prefill": prefill_phase,
+                        # Legacy compatibility fallback.
+                        "base_time": d_c0,
+                        "increase_time": d_c1,
                         "comp_time_ms": comp_time_ms,
-                        "base_size": comm_base_bytes,
-                        "inc_size": comm_inc_bytes,
+                        "base_size": d_s0,
+                        "inc_size": d_s1,
                     },
                     "comm_bytes_to_next": comm_bytes_to_next,
                     "comm_time_ms": comm_time_ms,
@@ -386,26 +590,131 @@ class FlexiblePipelineScheduler:
                     "stage_models": {
                         "decode": {
                             "time_ms": {
-                                "form": "linear",
-                                "base": stage_base_time,
-                                "inc": stage_inc_time,
-                                "x": "seq_len",
-                                "unit": "ms",
-                                "expr": "base + inc * x",
+                                "single": self._poly_doc(d_c0, d_c1, d_c2, x="context_len", unit="ms")
                             },
                             "comm_bytes": {
-                                "form": "linear",
-                                "base": comm_base_bytes,
-                                "inc": comm_inc_bytes,
-                                "x": "seq_len",
-                                "unit": "bytes",
-                                "expr": "base + inc * x",
+                                "single": self._poly_doc(d_s0, d_s1, d_s2, x="context_len", unit="bytes")
+                            },
+                            "comm_time_ms": {
+                                "single": self._poly_doc(d_t0, d_t1, d_t2, x="context_len", unit="ms")
+                            },
+                            "memory_gb": {
+                                "single": {
+                                    "form": "linear",
+                                    "c0": float(d_mem_c0),
+                                    "c1": float(d_mem_kv_per_token),
+                                    "c2": 0.0,
+                                    "x": "seq_len",
+                                    "batch_term": "batch_size",
+                                    "unit": "GB",
+                                    "expr": "c0 + c1 * seq_len * batch_size",
+                                }
                             },
                         },
-                        "prefill": {"time_ms": None, "comm_bytes": None},
+                        "prefill": {
+                            "time_ms": {
+                                "single": self._poly_doc(p_c0, p_c1, p_c2, x="seq_len", unit="ms")
+                            },
+                            "comm_bytes": {
+                                "single": self._poly_doc(p_s0, p_s1, p_s2, x="seq_len", unit="bytes")
+                            },
+                            "comm_time_ms": {
+                                "single": self._poly_doc(p_t0, p_t1, p_t2, x="seq_len", unit="ms")
+                            },
+                        },
                     },
                 }
             )
+
+            if worker_name == f"{self.designated_device}_0":
+                d = pipeline_stages[-1]["stage_models"]["decode"]
+                p = pipeline_stages[-1]["stage_models"]["prefill"]
+                if "head_model" in decode_phase and "tail_model" in decode_phase:
+                    d["time_ms"] = {
+                        "head": self._poly_doc(
+                            decode_phase["head_model"]["a"],
+                            decode_phase["head_model"]["b"],
+                            decode_phase["head_model"]["c"],
+                            x="context_len",
+                            unit="ms",
+                        ),
+                        "tail": self._poly_doc(
+                            decode_phase["tail_model"]["a"],
+                            decode_phase["tail_model"]["b"],
+                            decode_phase["tail_model"]["c"],
+                            x="context_len",
+                            unit="ms",
+                        ),
+                    }
+                    d["comm_bytes"] = {
+                        "head": self._poly_doc(
+                            decode_phase["head_model"]["size_a"],
+                            decode_phase["head_model"]["size_b"],
+                            decode_phase["head_model"]["size_c"],
+                            x="context_len",
+                            unit="bytes",
+                        ),
+                        "tail": self._poly_doc(0, 0, 0, x="context_len", unit="bytes"),
+                    }
+                    d["comm_time_ms"] = {
+                        "head": self._poly_doc(
+                            decode_phase["head_model"]["size_a"] * comm_scale,
+                            decode_phase["head_model"]["size_b"] * comm_scale,
+                            decode_phase["head_model"]["size_c"] * comm_scale,
+                            x="context_len",
+                            unit="ms",
+                        ),
+                        "tail": self._poly_doc(0, 0, 0, x="context_len", unit="ms"),
+                    }
+                    d["memory_gb"] = {
+                        "head": dict(d["memory_gb"]["single"]),
+                        "tail": {
+                            "form": "linear",
+                            "c0": 0.0,
+                            "c1": 0.0,
+                            "c2": 0.0,
+                            "x": "seq_len",
+                            "batch_term": "batch_size",
+                            "unit": "GB",
+                            "expr": "c0 + c1 * seq_len * batch_size",
+                        },
+                    }
+                    p["time_ms"] = {
+                        "head": self._poly_doc(
+                            prefill_phase["head_model"]["a"],
+                            prefill_phase["head_model"]["b"],
+                            prefill_phase["head_model"]["c"],
+                            x="seq_len",
+                            unit="ms",
+                        ),
+                        "tail": self._poly_doc(
+                            prefill_phase["tail_model"]["a"],
+                            prefill_phase["tail_model"]["b"],
+                            prefill_phase["tail_model"]["c"],
+                            x="seq_len",
+                            unit="ms",
+                        ),
+                    }
+                    p["comm_bytes"] = {
+                        "head": self._poly_doc(
+                            prefill_phase["head_model"]["size_a"],
+                            prefill_phase["head_model"]["size_b"],
+                            prefill_phase["head_model"]["size_c"],
+                            x="seq_len",
+                            unit="bytes",
+                        ),
+                        "tail": self._poly_doc(0, 0, 0, x="seq_len", unit="bytes"),
+                    }
+                    p["comm_time_ms"] = {
+                        "head": self._poly_doc(
+                            prefill_phase["head_model"]["size_a"] * comm_scale,
+                            prefill_phase["head_model"]["size_b"] * comm_scale,
+                            prefill_phase["head_model"]["size_c"] * comm_scale,
+                            x="seq_len",
+                            unit="ms",
+                        ),
+                        "tail": self._poly_doc(0, 0, 0, x="seq_len", unit="ms"),
+                    }
 
         model_name = str(self.model_cfg.get("name", "llama2-7b"))
         generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

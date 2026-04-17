@@ -1,0 +1,31 @@
+{
+  "schema_version": "worker_strategy.v1",
+  "generated_at": "2026-04-14T07:51:05Z",
+  "worker_name": "agx_0",
+  "global_strategy_ref": "pipeline_strategy.json",
+  "execution_plan": {
+    "head_ordered_modules": [
+      "decoder_layer",
+      "decoder_layer",
+      "decoder_layer",
+      "decoder_layer",
+      "decoder_layer",
+      "decoder_layer",
+      "decoder_layer",
+      "decoder_layer"
+    ],
+    "tail_ordered_modules": [],
+    "phase_rules": {
+      "prefill": {
+        "enabled": true
+      },
+      "decode": {
+        "enabled": true
+      }
+    },
+    "transfer_policy": {
+      "compute_payload_bytes_locally": true,
+      "formula_ref": "model_config.comm_contract.v1"
+    }
+  }
+}
