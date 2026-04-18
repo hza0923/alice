@@ -113,14 +113,12 @@ class RequestJournal:
                 total_bytes += int(h.payload_bytes_sent)
                 total_ms += float(h.actual_comm_ms)
         total_s = total_ms / 1000.0
-        bw: Optional[float] = None
-        if total_s > 0.0:
-            bw = float(total_bytes) / total_s
+        mbps = avg_bandwidth_mbps(total_bytes, total_s)
         return {
             "total_payload_bytes_sent": total_bytes,
             "total_transfer_time_ms": total_ms,
             "total_transfer_time_s": total_s,
-            "avg_bandwidth_bytes_per_s": bw,
+            "avg_bandwidth_mbps": mbps,
         }
 
     def to_serializable(self, *, transfer_summary: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -202,11 +200,11 @@ class RequestJournal:
     def export_json(self, path: str | Path, *, transfer_summary: Optional[Dict[str, Any]] = None) -> None:
         ta = transfer_summary if transfer_summary is not None else self.transfer_aggregate()
         LOG.info(
-            "[%s] transfer_summary bytes=%s time_ms=%s avg_bw_Bps=%s",
+            "[%s] transfer_summary bytes=%s time_ms=%s avg_bw_Mbps=%s",
             self.worker_name,
             ta["total_payload_bytes_sent"],
             ta["total_transfer_time_ms"],
-            ta["avg_bandwidth_bytes_per_s"],
+            ta["avg_bandwidth_mbps"],
         )
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +249,7 @@ class MasterLatencyTracker:
         total_s = _delta_s(self._first_submit_ts, self._pipeline_closed_ts)
         throughput = None if total_s is None or total_s <= 0 else float(self._total_tokens) / total_s
         xfer_s = self._outbound_transfer_ms / 1000.0
-        xfer_bw = None if xfer_s <= 0 else float(self._outbound_payload_bytes) / xfer_s
+        xfer_mbps = avg_bandwidth_mbps(self._outbound_payload_bytes, xfer_s)
         return {
             "schema_version": "master_latency.v2",
             "pipeline": {
@@ -265,24 +263,31 @@ class MasterLatencyTracker:
                 "total_payload_bytes_sent": self._outbound_payload_bytes,
                 "total_transfer_time_ms": self._outbound_transfer_ms,
                 "total_transfer_time_s": xfer_s,
-                "avg_bandwidth_bytes_per_s": xfer_bw,
+                "avg_bandwidth_mbps": xfer_mbps,
             },
             "requests": dict(self._records),
         }
 
     def export_json(self, path: str | Path) -> None:
         xfer_s = self._outbound_transfer_ms / 1000.0
-        xfer_bw = None if xfer_s <= 0 else float(self._outbound_payload_bytes) / xfer_s
+        xfer_mbps = avg_bandwidth_mbps(self._outbound_payload_bytes, xfer_s)
         LOG.info(
-            "[master] transfer_summary bytes=%s time_ms=%s avg_bw_Bps=%s",
+            "[master] transfer_summary bytes=%s time_ms=%s avg_bw_Mbps=%s",
             self._outbound_payload_bytes,
             self._outbound_transfer_ms,
-            xfer_bw,
+            xfer_mbps,
         )
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("w", encoding="utf-8") as f:
             json.dump(self.to_serializable(), f, indent=2, ensure_ascii=False)
+
+
+def avg_bandwidth_mbps(total_payload_bytes: int, total_time_s: float) -> Optional[float]:
+    """Megabits per second (decimal Mb/s): (bytes * 8) / (time_s * 1e6)."""
+    if total_time_s <= 0.0:
+        return None
+    return float(total_payload_bytes) * 8.0 / (total_time_s * 1_000_000.0)
 
 
 def _delta_ms(start: Optional[float], end: Optional[float]) -> Optional[float]:

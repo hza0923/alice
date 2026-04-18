@@ -15,7 +15,7 @@ from pp_nextgen.runtime.executors.shape import ShapeExecutor
 from pp_nextgen.runtime.executors.sleep import SleepExecutor
 from pp_nextgen.runtime.grpc_gen import pipeline_v2_pb2 as pv2
 from pp_nextgen.runtime.grpc_gen import pipeline_v2_pb2_grpc as pv2_grpc
-from pp_nextgen.runtime.metrics import HopRecord, RequestJournal
+from pp_nextgen.runtime.metrics import HopRecord, RequestJournal, avg_bandwidth_mbps
 from pp_nextgen.runtime.model import SleepPipelineModel
 from pp_nextgen.runtime.strategy import (
     decoder_submodules_from_model_yaml,
@@ -157,12 +157,12 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
     def _transfer_summary_dict(self) -> Dict[str, Any]:
         total_s = self._outbound_xfer_ms / 1000.0
-        bw = None if total_s <= 0.0 else float(self._outbound_xfer_bytes) / total_s
+        mbps = avg_bandwidth_mbps(int(self._outbound_xfer_bytes), total_s)
         return {
             "total_payload_bytes_sent": int(self._outbound_xfer_bytes),
             "total_transfer_time_ms": float(self._outbound_xfer_ms),
             "total_transfer_time_s": float(total_s),
-            "avg_bandwidth_bytes_per_s": bw,
+            "avg_bandwidth_mbps": mbps,
         }
 
     async def initialize(self) -> bool:
