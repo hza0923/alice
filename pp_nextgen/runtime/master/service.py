@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Dict, Optional
 
 import grpc
@@ -51,7 +52,10 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
                 self._send_queue.task_done()
                 continue
             try:
+                t0 = time.perf_counter()
                 await self._first_stub.SendFrame(frame, timeout=timeout)
+                dt_ms = (time.perf_counter() - t0) * 1000.0
+                self._latency.record_outbound_send(len(frame.payload), dt_ms)
             except Exception as e:
                 LOG.error("SendFrame to first worker failed: %s", e)
             self._send_queue.task_done()

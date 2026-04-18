@@ -146,6 +146,24 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         self._open_requests: Set[str] = set()
         self._total_tokens = 0
         self._pending_pipeline_stop: Optional[pv2.Frame] = None
+        self._outbound_xfer_bytes: int = 0
+        self._outbound_xfer_ms: float = 0.0
+
+    def _scaled_payload_byte_len(self, nominal_bytes: int) -> int:
+        div = float(self._rt.payload_size_divisor)
+        if div <= 0:
+            div = 1.0
+        return max(0, int(float(nominal_bytes) / div))
+
+    def _transfer_summary_dict(self) -> Dict[str, Any]:
+        total_s = self._outbound_xfer_ms / 1000.0
+        bw = None if total_s <= 0.0 else float(self._outbound_xfer_bytes) / total_s
+        return {
+            "total_payload_bytes_sent": int(self._outbound_xfer_bytes),
+            "total_transfer_time_ms": float(self._outbound_xfer_ms),
+            "total_transfer_time_s": float(total_s),
+            "avg_bandwidth_bytes_per_s": bw,
+        }
 
     async def initialize(self) -> bool:
         ch = grpc.aio.insecure_channel(self.master_addr)
@@ -239,7 +257,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         self._done.set()
         self._model.close_all_kv_sessions()
         if self._metrics_out:
-            self._journal.export_json(self._metrics_out)
+            self._journal.export_json(self._metrics_out, transfer_summary=self._transfer_summary_dict())
         return pv2.Ack(ok=True, message="")
 
     async def _send_processor(self) -> None:
@@ -251,6 +269,8 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                     t0 = time.perf_counter()
                     await self._next_stub.SendFrame(frame, timeout=timeout)
                     dt = (time.perf_counter() - t0) * 1000.0
+                    self._outbound_xfer_bytes += len(frame.payload)
+                    self._outbound_xfer_ms += dt
                     if hop is not None:
                         hop.actual_comm_ms = dt
                 except Exception as e:
@@ -351,7 +371,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             context_len=int(frame.context_len),
             branch="single",
         )
-        payload = b"x" * int(exp_bytes)
+        payload = b"x" * self._scaled_payload_byte_len(exp_bytes)
         out = self._next_frame_towards_peer(
             _copy_frame(
                 frame,
@@ -432,7 +452,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             context_len=int(frame.context_len),
             branch=branch,
         )
-        payload = b"x" * int(exp_bytes)
+        payload = b"x" * self._scaled_payload_byte_len(exp_bytes)
 
         if not self._model.has_tail:
             self._active_reqs.add(frame.req_id)
@@ -518,7 +538,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             context_len=int(frame.context_len),
             branch="tail",
         )
-        payload = b"x" * int(exp_bytes)
+        payload = b"x" * self._scaled_payload_byte_len(exp_bytes)
         new_ctx = int(frame.context_len) + 1
         self._total_tokens += int(frame.batch_size or 1)
         self._journal.mark_first_token(frame.req_id)

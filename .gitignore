@@ -6,3 +6,7 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .cursor/
+outputs/runtime
+outputs/datasets
+outputs/simulation
+dataset/

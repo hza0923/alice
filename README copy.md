@@ -4,7 +4,7 @@
 coarse-grained-bs32-len32
 ```powershell
 # master-3060 
-python -m pp_nextgen.runtime.cli master --pipeline-strategy outputs/scheduler/export/coarse-grained-bs32-len32/pipeline_strategy.json --bind 0.0.0.0:50050 
+python -m pp_nextgen.runtime.cli master --pipeline-strategy outputs/scheduler/export/coarse-grained-bs32-len32/pipeline_strategy.json --bind 0.0.0.0:50050 --metrics-out outputs/runtime/logs/coarse-grained-bs32-len32/master.metrics.json
 ```
 
 ```powershell
@@ -24,7 +24,7 @@ python -m pp_nextgen.runtime.cli worker --worker-name tx2_0 --master 192.168.31.
 fine-grained-bs32-len32
 ```powershell
 # master-3060 
-python -m pp_nextgen.runtime.cli master --pipeline-strategy outputs/scheduler/export/fine-grained-bs32-len32/pipeline_strategy.json --bind 0.0.0.0:50050 
+python -m pp_nextgen.runtime.cli master --pipeline-strategy outputs/scheduler/export/fine-grained-bs32-len32/pipeline_strategy.json --bind 0.0.0.0:50050 --metrics-out outputs/runtime/logs/fine-grained-bs32-len32/master.metrics.json
 ```
 
 ```powershell

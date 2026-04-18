@@ -20,6 +20,7 @@ dependencies = [
 dev = ["ruff>=0.4", "grpcio-tools>=1.62.0"]
 capture = ["torch>=2.0.0"]
 shape = ["torch>=2.0.0"]
+data = ["datasets>=2.14.0", "tiktoken>=0.5.0"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -17,6 +17,7 @@ class RuntimeConfig:
     max_in_flight_requests: int
     rpc_timeout_ms: int
     registration_wait_timeout_ms: int
+    payload_size_divisor: float
     execution_mode: str
     shape_enable_sdpa: bool
     shape_random_seed: int
@@ -33,6 +34,9 @@ def load_runtime_config(path: str | Path) -> RuntimeConfig:
     sched = r.get("scheduling") or {}
     ex = r.get("execution") or {}
     shape = ex.get("shape_executor") or {}
+    psd = float(grpc.get("payload_size_divisor", 1.0))
+    if psd <= 0:
+        psd = 1.0
     return RuntimeConfig(
         task_queue_maxsize=int(q.get("task_queue_maxsize", 2048)),
         send_queue_maxsize=int(q.get("send_queue_maxsize", 2048)),
@@ -40,6 +44,7 @@ def load_runtime_config(path: str | Path) -> RuntimeConfig:
         max_in_flight_requests=int(sched.get("max_in_flight_requests", 512)),
         rpc_timeout_ms=int(grpc.get("rpc_timeout_ms", 300000)),
         registration_wait_timeout_ms=int(grpc.get("registration_wait_timeout_ms", 600_000)),
+        payload_size_divisor=psd,
         execution_mode=str(ex.get("mode", "sleep_executor")),
         shape_enable_sdpa=bool(shape.get("enable_sdpa", False)),
         shape_random_seed=int(shape.get("random_seed", 42)),

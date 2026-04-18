@@ -5,6 +5,9 @@ runtime:
     rpc_timeout_ms: 300000
     # Master GetNextWorker does not return until all workers registered; keep this comfortably above worst-case startup skew.
     registration_wait_timeout_ms: 600000
+    # Nominal commBytes from strategy are divided by this factor for the actual dummy payload length (>=1).
+    # Use >1 to shrink payloads when the LAN is slow and you want runs closer to compute/comm overlap settings.
+    payload_size_divisor: 1.0
   queues:
     task_queue_maxsize: 2048
     send_queue_maxsize: 2048
