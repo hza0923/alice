@@ -16,6 +16,10 @@ runtime:
     shape_executor:
       enable_sdpa: false
       random_seed: 42
+      # Shared KV pools and synthetic-op bounds (shape_executor only; requires torch).
+      max_batch_size: 32
+      max_seq_len: 4096
+      device: cuda:0
   observability:
     metrics_enabled: true
     tracing_enabled: true

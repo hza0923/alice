@@ -1,11 +1,10 @@
-"""Shape / no-weight execution path (placeholder for torch kernels)."""
+"""Shape executor: torch microbench-style compute (see ``shape_pipeline_model``)."""
 
 from __future__ import annotations
 
 import time
 from typing import Any, Dict, Tuple
 
-from pp_nextgen.runtime.model import PipelineModel
 from pp_nextgen.runtime.strategy import expected_compute_ms
 
 
@@ -18,10 +17,9 @@ def _phase_name(frame: Any) -> str:
 
 
 class ShapeExecutor:
-    """Runs `PipelineModel` forward then attributes wall time to compute."""
+    """Runs shape pipeline forward and attributes wall time to compute."""
 
     async def initialize(self) -> None:
-        # Reserved for future kernel/model warmup.
         return
 
     async def run(
@@ -29,7 +27,7 @@ class ShapeExecutor:
         frame: Any,
         stage: Dict[str, Any],
         merged_model: Dict[str, Any],
-        model: PipelineModel,
+        model: Any,
         branch: str = "single",
     ) -> Tuple[float, float]:
         _ = merged_model
@@ -42,10 +40,10 @@ class ShapeExecutor:
         ctx = int(frame.context_len)
         bs = int(frame.batch_size or 1)
         if branch == "tail" and model.has_tail:
-            model.forward_decode_step_tail(rid, ctx, bs)
+            model.forward_decode_step_tail(rid, ctx, bs, phase=ph)
         elif branch == "head" and model.has_tail:
-            model.forward_decode_step_head(rid, ctx, bs)
+            model.forward_decode_step_head(rid, ctx, bs, phase=ph)
         else:
-            model.forward_decode_step(rid, ctx, bs)
+            model.forward_decode_step(rid, ctx, bs, phase=ph)
         actual_ms = (time.perf_counter() - t0) * 1000.0
         return exp_ms, actual_ms

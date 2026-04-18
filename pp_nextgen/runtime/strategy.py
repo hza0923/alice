@@ -258,3 +258,40 @@ def split_head_tail_modules_from_execution_plan(
     if not head and not tail:
         raise ValueError("worker strategy must provide head_ordered_modules/tail_ordered_modules")
     return head, tail
+
+
+# Canonical decoder step order (matches configs/model/*.yaml scheduler.component_config.decoder_layer).
+DEFAULT_DECODER_SUBMODULES: List[str] = [
+    "qkv_projection",
+    "attn_qk",
+    "attn_av",
+    "o_projection",
+    "up_projection",
+    "down_projection",
+]
+
+
+def decoder_submodules_from_model_yaml(model_yaml: Dict[str, Any]) -> List[str]:
+    """Ordered submodule names used when expanding coarse ``decoder_layer`` placeholders."""
+    sch = model_yaml.get("scheduler") or {}
+    cc = sch.get("component_config") or {}
+    dl = cc.get("decoder_layer")
+    if isinstance(dl, list) and dl:
+        return [str(x) for x in dl]
+    return list(DEFAULT_DECODER_SUBMODULES)
+
+
+def expand_decoder_layer_placeholders(
+    module_names: List[str], decoder_submodules: Optional[List[str]] = None
+) -> List[str]:
+    """Replace each ``decoder_layer`` token with the configured decoder submodule list (fine-grained exports unchanged)."""
+    sub = list(decoder_submodules) if decoder_submodules else list(DEFAULT_DECODER_SUBMODULES)
+    if not sub:
+        sub = list(DEFAULT_DECODER_SUBMODULES)
+    out: List[str] = []
+    for n in module_names:
+        if str(n).lower() == "decoder_layer":
+            out.extend(sub)
+        else:
+            out.append(str(n))
+    return out

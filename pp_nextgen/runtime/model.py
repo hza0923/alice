@@ -146,6 +146,33 @@ def _build_module_list(
     return modules
 
 
+class SleepPipelineModel:
+    """No numpy weights/KV: used with ``SleepExecutor`` only.
+
+    Keeps ``has_tail`` so worker0 head/tail queue routing matches the strategy export
+    without allocating KV tensors or building module chains.
+    """
+
+    def __init__(self, *, has_tail: bool) -> None:
+        self._has_tail = bool(has_tail)
+
+    @property
+    def has_tail(self) -> bool:
+        return self._has_tail
+
+    def init_layers(self) -> None:
+        return
+
+    def ensure_kv_session(self, req_id: str, batch_size: int, target_len: int) -> None:
+        return
+
+    def close_kv_session(self, req_id: str) -> None:
+        return
+
+    def close_all_kv_sessions(self) -> None:
+        return
+
+
 class PipelineModel:
     """
     head_ordered_modules: compute for ingress frames (master or internal head queue).

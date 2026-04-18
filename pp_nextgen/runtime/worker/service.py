@@ -16,8 +16,10 @@ from pp_nextgen.runtime.executors.sleep import SleepExecutor
 from pp_nextgen.runtime.grpc_gen import pipeline_v2_pb2 as pv2
 from pp_nextgen.runtime.grpc_gen import pipeline_v2_pb2_grpc as pv2_grpc
 from pp_nextgen.runtime.metrics import HopRecord, RequestJournal
-from pp_nextgen.runtime.model import PipelineModel
+from pp_nextgen.runtime.model import SleepPipelineModel
 from pp_nextgen.runtime.strategy import (
+    decoder_submodules_from_model_yaml,
+    expand_decoder_layer_placeholders,
     expected_comm_bytes,
     expected_comm_ms,
     find_stage_for_worker,
@@ -71,12 +73,16 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         self._order = pipeline_stage_order(self._pipeline_doc)
         self._first_worker = self._order[0] if self._order else ""
         self._is_first_worker = worker_name == self._first_worker
-        self._merged_model = merge_model_for_runtime(
-            self._pipeline_doc, load_model_yaml(model_yaml_path)
-        )
+        model_yaml_doc = load_model_yaml(model_yaml_path)
+        self._merged_model = merge_model_for_runtime(self._pipeline_doc, model_yaml_doc)
         exec_plan = (self._worker_doc.get("execution_plan") or {}) if self._worker_doc else {}
         head_mods = list(exec_plan.get("head_ordered_modules") or [])
         tail_mods = list(exec_plan.get("tail_ordered_modules") or [])
+
+        use_shape = rt.execution_mode == "shape_executor"
+        dec_sub = decoder_submodules_from_model_yaml(model_yaml_doc)
+        if use_shape:
+            from pp_nextgen.runtime.shape_pipeline_model import ShapeTorchPipelineModel
 
         if self._is_first_worker:
             if not head_mods and not tail_mods:
@@ -86,11 +92,17 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                     is_first_worker=True,
                     pipeline_doc=self._pipeline_doc,
                 )
-            self._model = PipelineModel.from_configs(
-                self._merged_model,
-                head_ordered_modules=head_mods,
-                tail_ordered_modules=tail_mods if tail_mods else None,
-            )
+            if use_shape:
+                hm = expand_decoder_layer_placeholders(head_mods, dec_sub)
+                tm = expand_decoder_layer_placeholders(tail_mods, dec_sub)
+                self._model = ShapeTorchPipelineModel.from_configs(
+                    self._merged_model,
+                    head_ordered_modules=hm,
+                    tail_ordered_modules=tm if tm else None,
+                    rt=rt,
+                )
+            else:
+                self._model = SleepPipelineModel(has_tail=bool(tail_mods))
         else:
             if not head_mods and not tail_mods:
                 combined, _ = split_head_tail_modules_from_execution_plan(
@@ -101,12 +113,17 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                 )
             else:
                 combined = head_mods + tail_mods
-            self._model = PipelineModel.from_configs(
-                self._merged_model,
-                ordered_modules=combined,
-            )
+            if use_shape:
+                combined = expand_decoder_layer_placeholders(combined, dec_sub)
+                self._model = ShapeTorchPipelineModel.from_configs(
+                    self._merged_model,
+                    ordered_modules=combined,
+                    rt=rt,
+                )
+            else:
+                self._model = SleepPipelineModel(has_tail=False)
 
-        if rt.execution_mode == "shape_executor":
+        if use_shape:
             self._executor: Any = ShapeExecutor()
         else:
             self._executor = SleepExecutor()
@@ -173,8 +190,11 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
     def _prewarm_model_layers(self) -> None:
         """Build decode module chain during initialization to avoid first-request lazy cost."""
+        if isinstance(self._model, SleepPipelineModel):
+            LOG.info("sleep executor: no compute pipeline to prewarm")
+            return
         self._model.init_layers()
-        LOG.info("pipeline model modules prewarmed")
+        LOG.info("compute pipeline prewarmed (%s)", type(self._model).__name__)
 
     def set_public_address(self, addr: str) -> None:
         self._public_addr = addr

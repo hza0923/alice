@@ -1,10 +1,12 @@
-"""Sleep-based executor using profiled timing models."""
+"""Sleep-based executor using profiled timing models.
+
+No real model or KV cache: ``SleepPipelineModel`` is a routing placeholder; timing is sleep-only.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Dict, Tuple
 
-from pp_nextgen.runtime.model import PipelineModel
 from pp_nextgen.runtime.precise_sleep import sleep_seconds_async
 from pp_nextgen.runtime.strategy import expected_compute_ms
 
@@ -19,7 +21,6 @@ def _phase_name(frame: Any) -> str:
 
 class SleepExecutor:
     async def initialize(self) -> None:
-        # Sleep executor has no runtime state to warm up.
         return
 
     async def run(
@@ -27,7 +28,7 @@ class SleepExecutor:
         frame: Any,
         stage: Dict[str, Any],
         merged_model: Dict[str, Any],
-        model: PipelineModel,
+        model: Any,
         branch: str = "single",
     ) -> Tuple[float, float]:
         _ = merged_model
@@ -36,6 +37,6 @@ class SleepExecutor:
         exp_ms = expected_compute_ms(
             stage, ph, int(frame.context_len), int(frame.batch_size or 1), branch=branch
         )
-        # Sleep path keeps wall time = profiled delay; full numpy module chain is in shape_executor.
+        # Wall time follows profiled delay only; shape_executor runs the torch microbench path.
         actual_ms = await sleep_seconds_async(exp_ms / 1000.0)
         return exp_ms, actual_ms
