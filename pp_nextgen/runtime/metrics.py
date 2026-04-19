@@ -121,6 +121,36 @@ class RequestJournal:
             "avg_bandwidth_mbps": mbps,
         }
 
+    def hop_timing_aggregate(self) -> Dict[str, Any]:
+        """Per-hop means for compute/comm (same averages as appear in exported transfer_summary)."""
+        n = 0
+        sum_act_c = 0.0
+        sum_exp_c = 0.0
+        sum_act_comm = 0.0
+        for tr in self._traces.values():
+            for h in tr.hops:
+                n += 1
+                sum_act_c += float(h.actual_compute_ms)
+                sum_exp_c += float(h.expected_compute_ms)
+                sum_act_comm += float(h.actual_comm_ms)
+        if n == 0:
+            return {
+                "avg_actual_compute_ms": None,
+                "avg_expected_compute_ms": None,
+                "avg_actual_comm_ms": None,
+            }
+        inv = 1.0 / float(n)
+        return {
+            "avg_actual_compute_ms": sum_act_c * inv,
+            "avg_expected_compute_ms": sum_exp_c * inv,
+            "avg_actual_comm_ms": sum_act_comm * inv,
+        }
+
+    def composed_transfer_summary(self, outbound: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Outbound RPC totals from caller (or journal) merged with hop-level timing averages."""
+        base = outbound if outbound is not None else self.transfer_aggregate()
+        return {**base, **self.hop_timing_aggregate()}
+
     def to_serializable(self, *, transfer_summary: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         out: Dict[str, Any] = {
             "worker_name": self.worker_name,
@@ -128,7 +158,7 @@ class RequestJournal:
             "summary": self.summary(),
             "requests": {},
         }
-        out["transfer_summary"] = transfer_summary if transfer_summary is not None else self.transfer_aggregate()
+        out["transfer_summary"] = self.composed_transfer_summary(transfer_summary)
         for rid, tr in self._traces.items():
             out["requests"][rid] = {
                 "req_id": tr.req_id,
@@ -198,13 +228,17 @@ class RequestJournal:
         }
 
     def export_json(self, path: str | Path, *, transfer_summary: Optional[Dict[str, Any]] = None) -> None:
-        ta = transfer_summary if transfer_summary is not None else self.transfer_aggregate()
+        ta = self.composed_transfer_summary(transfer_summary)
         LOG.info(
-            "[%s] transfer_summary bytes=%s time_ms=%s avg_bw_Mbps=%s",
+            "[%s] transfer_summary bytes=%s time_ms=%s avg_bw_Mbps=%s avg_actual_compute_ms=%s "
+            "avg_expected_compute_ms=%s avg_actual_comm_ms=%s",
             self.worker_name,
             ta["total_payload_bytes_sent"],
             ta["total_transfer_time_ms"],
             ta["avg_bandwidth_mbps"],
+            ta.get("avg_actual_compute_ms"),
+            ta.get("avg_expected_compute_ms"),
+            ta.get("avg_actual_comm_ms"),
         )
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)

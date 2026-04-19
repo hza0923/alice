@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Set, Tuple
 
 import grpc
 
-from pp_nextgen.runtime.config import RuntimeConfig
+from pp_nextgen.runtime.config import RuntimeConfig, sleep_compute_offset_ms_for_worker
 from pp_nextgen.runtime.executors.shape import ShapeExecutor
 from pp_nextgen.runtime.executors.sleep import SleepExecutor
 from pp_nextgen.runtime.grpc_gen import pipeline_v2_pb2 as pv2
@@ -126,7 +126,9 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         if use_shape:
             self._executor: Any = ShapeExecutor()
         else:
-            self._executor = SleepExecutor()
+            self._executor = SleepExecutor(
+                compute_sleep_offset_ms=sleep_compute_offset_ms_for_worker(worker_name, rt),
+            )
 
         self._journal = RequestJournal(worker_name)
         maxsz = rt.task_queue_maxsize

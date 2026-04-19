@@ -75,3 +75,12 @@ python tools/simulation/run_pipeline_des_sim.py `
 - `tools/runtime/`: proto generation and submit task
 - `tools/simulation/`: DES and local runtime cluster simulation
 - `tools/transport/`: transport A/B benchmark placeholder
+
+
+gather logs
+```sh
+scp -r icloudecnu@192.168.31.213:/home/icloudecnu/hza/alice/outputs/runtime/logs "C:\Users\84538\Desktop\实验室\202505-~\LLM学习\grpc_heterogeneous_pipeline_nextgen\outputs\runtime\agxlogs"
+
+scp -r root@192.168.31.119:/root/hza/alice/outputs/runtime/logs "C:\Users\84538\Desktop\实验室\202505-~\LLM学习\grpc_heterogeneous_pipeline_nextgen\outputs\runtime\2080logs"
+
+```

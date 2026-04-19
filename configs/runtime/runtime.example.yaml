@@ -16,6 +16,11 @@ runtime:
     max_in_flight_requests: 512
   execution:
     mode: sleep_executor
+    # sleep_executor only: add ms to profiled compute before sleeping (negative = shorten sleep).
+    # Keys must match pipeline worker_name (e.g. 3060_0, agx_0). Missing names use default_compute_sleep_offset_ms.
+    sleep_executor:
+      default_compute_sleep_offset_ms: 0.0
+      worker_compute_sleep_offset_ms: {"3060_0": 0.0, "2080super_0": 0.0, "agx_0": 0.0, "tx2_0": 0.0}
     shape_executor:
       enable_sdpa: false
       random_seed: 42

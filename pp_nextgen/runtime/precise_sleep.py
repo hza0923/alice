@@ -1,6 +1,7 @@
-"""Higher-resolution delays on Windows (timeBeginPeriod + QPC busy-wait tail).
+"""Higher-resolution delays: Windows uses timeBeginPeriod + QPC tail; POSIX uses coarse
+``time.sleep`` plus ``perf_counter`` spin to the deadline (same hybrid idea as Windows).
 
-Async entrypoints avoid blocking the event loop for long sleeps.
+Async entrypoints avoid blocking the event loop for short sleeps by using a thread pool.
 """
 
 from __future__ import annotations
@@ -35,8 +36,11 @@ def _ensure_windows_timer_resolution() -> None:
     atexit.register(_restore)
 
 
+_HYBRID_TAIL_MARGIN_MS = 2.0
+
+
 class PreciseSleep:
-    """Windows: 1 ms timer period + optional QPC spin for sub-tick accuracy."""
+    """Windows: 1 ms timer period + QPC spin. POSIX: ``sleep`` most of interval + perf_counter spin."""
 
     def __init__(self) -> None:
         self.is_windows = _is_windows
@@ -52,11 +56,16 @@ class PreciseSleep:
             time.sleep(ms / 1000.0)
 
     def precise_sleep_ms(self, milliseconds: float) -> None:
-        """Hybrid coarse Sleep + QPC busy-wait for short intervals."""
+        """Hybrid coarse delay + high-resolution busy-wait to target (matches Windows strategy)."""
         if milliseconds <= 0:
             return
         if not self.is_windows:
-            time.sleep(milliseconds / 1000.0)
+            deadline = time.perf_counter() + milliseconds / 1000.0
+            coarse_s = max(0.0, (milliseconds - _HYBRID_TAIL_MARGIN_MS) / 1000.0)
+            if coarse_s > 0:
+                time.sleep(coarse_s)
+            while time.perf_counter() < deadline:
+                pass
             return
 
         _ensure_windows_timer_resolution()
@@ -78,9 +87,9 @@ class PreciseSleep:
 
 _default: Optional[PreciseSleep] = None
 
-# Decode-style hops are often ~20–40ms; asyncio.sleep on Windows aligns to ~15.6ms ticks.
-# Keep coarse asyncio only for long sleeps (e.g. large prefill) to avoid thread-pool churn.
-_WIN_ASYNCIO_SLEEP_THRESHOLD_MS = 100.0
+# Decode-style hops are often ~20–40ms; asyncio.sleep aligns to coarse ticks on many platforms.
+# Keep asyncio only for long sleeps (e.g. large prefill) to avoid thread-pool churn.
+_LONG_ASYNCIO_SLEEP_THRESHOLD_MS = 100.0
 
 
 def _singleton() -> PreciseSleep:
@@ -103,23 +112,19 @@ def _precise_sleep_measure_ms(milliseconds: float) -> float:
 async def sleep_seconds_async(seconds: float) -> float:
     """Sleep for ``seconds`` wall time; returns elapsed ms (intended for metrics).
 
-    On Windows, delays under ~100ms use ``timeBeginPeriod`` + QPC hybrid sleep on a
-    worker thread and **measure inside that thread**, so ``actual_compute_ms`` is not
-    inflated by asyncio's ~15.6ms wakeup quantization after ``run_in_executor`` completes.
+    Short sleeps use hybrid precise timing on a worker thread (Windows: timeBeginPeriod + QPC;
+    POSIX: ``time.sleep`` + perf_counter spin) so ``actual_compute_ms`` is not inflated by
+    asyncio's wakeup quantization after ``run_in_executor`` completes.
     """
     if seconds <= 0:
         return 0.0
-    s = _singleton()
-    if not s.is_windows:
+    ms = seconds * 1000.0
+    if ms >= _LONG_ASYNCIO_SLEEP_THRESHOLD_MS:
         t0 = time.perf_counter()
         await asyncio.sleep(seconds)
         return (time.perf_counter() - t0) * 1000.0
 
-    _ensure_windows_timer_resolution()
-    ms = seconds * 1000.0
-    if ms >= _WIN_ASYNCIO_SLEEP_THRESHOLD_MS:
-        t0 = time.perf_counter()
-        await asyncio.sleep(seconds)
-        return (time.perf_counter() - t0) * 1000.0
+    if _singleton().is_windows:
+        _ensure_windows_timer_resolution()
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _precise_sleep_measure_ms, ms)
