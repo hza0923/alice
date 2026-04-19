@@ -89,6 +89,8 @@ def main() -> int:
 
     bs = int(solve.get("batch_size", 1))
     target_seq_len = int(solve.get("target_seq_len", 2048))
+    max_seq_len_raw = solve.get("max_seq_len")
+    max_seq_len = int(max_seq_len_raw) if max_seq_len_raw is not None else None
     use_fg = bool(solve.get("use_fine_grained", True))
     tail = list(solve.get("tail_candidates", [1, 2, 3, 4, 5, 6, 7]))
 
@@ -109,6 +111,7 @@ def main() -> int:
         use_fine_grained=use_fg,
         tail_candidates=tail,
         strategy_output_path=str(strategy_path),
+        max_seq_len=max_seq_len,
     )
 
     report_path = out_dir / "tail_sweep_report.json"

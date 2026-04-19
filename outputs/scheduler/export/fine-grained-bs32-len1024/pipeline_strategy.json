@@ -1,6 +1,6 @@
 {
   "schema_version": "pipeline_strategy.v2",
-  "generated_at": "2026-04-19T01:43:47Z",
+  "generated_at": "2026-04-19T02:48:00Z",
   "model": {
     "name": "llama2-7b",
     "num_layers": 32,
@@ -14,15 +14,17 @@
   "schedule_input": {
     "bs": 32,
     "target_seq_len": 1024,
+    "max_seq_len": 4096,
+    "kv_memory_seq_len": 4096,
     "designated_device": "3060",
-    "designated_tail_n": 2,
+    "designated_tail_n": 1,
     "use_fine_grained": true
   },
   "objective": {
     "name": "min_tbt_ms",
-    "value": 108.89542883935522
+    "value": 196.5823839863637
   },
-  "tbt_ms": 108.89542883935522,
+  "tbt_ms": 196.5823839863637,
   "pipeline_stages": [
     {
       "worker_name": "3060_0",
@@ -47,13 +49,376 @@
         "layer2_up_projection",
         "layer2_down_projection",
         "layer3_qkv_projection",
+        "output_embed_lm_head"
+      ],
+      "stage_params": {
+        "decode": {
+          "head_model": {
+            "base_time": 8.76925025825901,
+            "increase_time": 0.005411181021339763,
+            "quadratic_time": 0.0,
+            "a": 8.76925025825901,
+            "b": 0.005411181021339763,
+            "c": 0.0,
+            "comp_time_ms": 14.310299624110927,
+            "base_size": 786432,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 786432,
+            "size_b": 0,
+            "size_c": 0
+          },
+          "tail_model": {
+            "base_time": 0.970157859660685,
+            "increase_time": 0.0,
+            "quadratic_time": 0.0,
+            "a": 0.970157859660685,
+            "b": 0.0,
+            "c": 0.0,
+            "comp_time_ms": 0.970157859660685,
+            "base_size": 0,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 0,
+            "size_c": 0
+          }
+        },
+        "prefill": {
+          "head_model": {
+            "base_time": 6.762450378859392,
+            "increase_time": 1.4582804011124992,
+            "quadratic_time": 0.00013405688648145402,
+            "a": 6.762450378859392,
+            "b": 1.4582804011124992,
+            "c": 0.00013405688648145402,
+            "comp_time_ms": 1640.6104149172356,
+            "base_size": 0,
+            "inc_size": 786432,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 786432,
+            "size_c": 0
+          },
+          "tail_model": {
+            "base_time": 1.8891668400711534,
+            "increase_time": 0.3387890556976199,
+            "quadratic_time": 0.0,
+            "a": 1.8891668400711534,
+            "b": 0.3387890556976199,
+            "c": 0.0,
+            "comp_time_ms": 348.80915987443393,
+            "base_size": 0,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 0,
+            "size_c": 0
+          }
+        },
+        "base_time": 9.739408117919695,
+        "increase_time": 0.005411181021339763,
+        "comp_time_ms": 15.280457483771611,
+        "base_size": 786432,
+        "inc_size": 0
+      },
+      "comm_bytes_to_next": 786432,
+      "comm_time_ms": 31.457279999999997,
+      "next_worker": "tx2_0",
+      "is_last_worker": false,
+      "stage_models": {
+        "decode": {
+          "time_ms": {
+            "head": {
+              "form": "linear",
+              "c0": 8.76925025825901,
+              "c1": 0.005411181021339763,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.970157859660685,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "comm_bytes": {
+            "head": {
+              "form": "constant",
+              "c0": 786432.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "head": {
+              "form": "constant",
+              "c0": 31.457280000000004,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "head": {
+              "form": "linear",
+              "c0": 1.7128910000000002,
+              "c1": 4.57763671875e-05,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            },
+            "tail": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
+          }
+        },
+        "prefill": {
+          "time_ms": {
+            "head": {
+              "form": "quadratic",
+              "c0": 6.762450378859392,
+              "c1": 1.4582804011124992,
+              "c2": 0.00013405688648145402,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            },
+            "tail": {
+              "form": "linear",
+              "c0": 1.8891668400711534,
+              "c1": 0.3387890556976199,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_bytes": {
+            "head": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 786432.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "head": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 31.457280000000004,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          }
+        }
+      }
+    },
+    {
+      "worker_name": "tx2_0",
+      "modules_to_execute": [
         "layer3_attn_qk",
         "layer3_attn_av",
         "layer3_o_projection",
         "layer3_up_projection",
         "layer3_down_projection",
         "layer4_qkv_projection",
-        "layer4_attn_qk",
+        "layer4_attn_qk"
+      ],
+      "stage_params": {
+        "decode": {
+          "single_model": {
+            "base_time": 77.68415925659538,
+            "increase_time": 0.05807058714032171,
+            "quadratic_time": 0.0,
+            "a": 77.68415925659538,
+            "b": 0.05807058714032171,
+            "c": 0.0,
+            "comp_time_ms": 137.14844048828482,
+            "base_size": 0,
+            "inc_size": 2048,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 2048,
+            "size_c": 0
+          }
+        },
+        "prefill": {
+          "single_model": {
+            "base_time": 41.15141553263,
+            "increase_time": 27.75387540789288,
+            "quadratic_time": 0.0028909530484250647,
+            "a": 41.15141553263,
+            "b": 27.75387540789288,
+            "c": 0.0028909530484250647,
+            "comp_time_ms": 31492.5038169203,
+            "base_size": 0,
+            "inc_size": 0,
+            "quadratic_size": 2048,
+            "size_a": 0,
+            "size_b": 0,
+            "size_c": 2048
+          }
+        },
+        "base_time": 77.68415925659538,
+        "increase_time": 0.05807058714032171,
+        "comp_time_ms": 137.14844048828482,
+        "base_size": 0,
+        "inc_size": 2048
+      },
+      "comm_bytes_to_next": 2097152,
+      "comm_time_ms": 83.88608,
+      "next_worker": "agx_0",
+      "is_last_worker": false,
+      "stage_models": {
+        "decode": {
+          "time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 77.68415925659538,
+              "c1": 0.05807058714032171,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_bytes": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2048.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 0.08192,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "memory_gb": {
+            "single": {
+              "form": "linear",
+              "c0": 0.376953,
+              "c1": 2.288818359375e-05,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
+          }
+        },
+        "prefill": {
+          "time_ms": {
+            "single": {
+              "form": "quadratic",
+              "c0": 41.15141553263,
+              "c1": 27.75387540789288,
+              "c2": 0.0028909530484250647,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            }
+          },
+          "comm_bytes": {
+            "single": {
+              "form": "quadratic",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 2048.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "quadratic",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.08192,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            }
+          }
+        }
+      }
+    },
+    {
+      "worker_name": "agx_0",
+      "modules_to_execute": [
         "layer4_attn_av",
         "layer4_o_projection",
         "layer4_up_projection",
@@ -78,236 +443,6 @@
         "layer7_down_projection",
         "layer8_qkv_projection",
         "layer8_attn_qk",
-        "layer31_down_projection",
-        "output_embed_lm_head"
-      ],
-      "stage_params": {
-        "decode": {
-          "head_model": {
-            "base_time": 21.957073637886833,
-            "increase_time": 0.015364087527812337,
-            "quadratic_time": 0.0,
-            "a": 21.957073637886833,
-            "b": 0.015364087527812337,
-            "c": 0.0,
-            "comp_time_ms": 37.689899266366666,
-            "base_size": 0,
-            "inc_size": 2048,
-            "quadratic_size": 0,
-            "size_a": 0,
-            "size_b": 2048,
-            "size_c": 0
-          },
-          "tail_model": {
-            "base_time": 1.482910080011934,
-            "increase_time": 0.0,
-            "quadratic_time": 0.0,
-            "a": 1.482910080011934,
-            "b": 0.0,
-            "c": 0.0,
-            "comp_time_ms": 1.482910080011934,
-            "base_size": 0,
-            "inc_size": 0,
-            "quadratic_size": 0,
-            "size_a": 0,
-            "size_b": 0,
-            "size_c": 0
-          }
-        },
-        "prefill": {
-          "head_model": {
-            "base_time": 16.554655078192585,
-            "increase_time": 3.635451896846557,
-            "quadratic_time": 0.00038801473771887216,
-            "a": 16.554655078192585,
-            "b": 3.635451896846557,
-            "c": 0.00038801473771887216,
-            "comp_time_ms": 4146.120339067371,
-            "base_size": 0,
-            "inc_size": 0,
-            "quadratic_size": 2048,
-            "size_a": 0,
-            "size_b": 0,
-            "size_c": 2048
-          },
-          "tail_model": {
-            "base_time": 2.262445053311365,
-            "increase_time": 0.45455720588352,
-            "quadratic_time": 0.0,
-            "a": 2.262445053311365,
-            "b": 0.45455720588352,
-            "c": 0.0,
-            "comp_time_ms": 467.72902387803583,
-            "base_size": 0,
-            "inc_size": 0,
-            "quadratic_size": 0,
-            "size_a": 0,
-            "size_b": 0,
-            "size_c": 0
-          }
-        },
-        "base_time": 23.439983717898766,
-        "increase_time": 0.015364087527812337,
-        "comp_time_ms": 39.1728093463786,
-        "base_size": 0,
-        "inc_size": 2048
-      },
-      "comm_bytes_to_next": 2097152,
-      "comm_time_ms": 83.88608,
-      "next_worker": "agx_0",
-      "is_last_worker": false,
-      "stage_models": {
-        "decode": {
-          "time_ms": {
-            "head": {
-              "form": "linear",
-              "c0": 21.957073637886833,
-              "c1": 0.015364087527812337,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x"
-            },
-            "tail": {
-              "form": "constant",
-              "c0": 1.482910080011934,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "ms",
-              "expr": "c0"
-            }
-          },
-          "comm_bytes": {
-            "head": {
-              "form": "linear",
-              "c0": 0.0,
-              "c1": 2048.0,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "bytes",
-              "expr": "c0 + c1 * x"
-            },
-            "tail": {
-              "form": "constant",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "bytes",
-              "expr": "c0"
-            }
-          },
-          "comm_time_ms": {
-            "head": {
-              "form": "linear",
-              "c0": 0.0,
-              "c1": 0.08192,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x"
-            },
-            "tail": {
-              "form": "constant",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "ms",
-              "expr": "c0"
-            }
-          },
-          "memory_gb": {
-            "head": {
-              "form": "linear",
-              "c0": 3.68164,
-              "c1": 0.00012969970703125,
-              "c2": 0.0,
-              "x": "seq_len",
-              "batch_term": "batch_size",
-              "unit": "GB",
-              "expr": "c0 + c1 * seq_len * batch_size"
-            },
-            "tail": {
-              "form": "linear",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "seq_len",
-              "batch_term": "batch_size",
-              "unit": "GB",
-              "expr": "c0 + c1 * seq_len * batch_size"
-            }
-          }
-        },
-        "prefill": {
-          "time_ms": {
-            "head": {
-              "form": "quadratic",
-              "c0": 16.554655078192585,
-              "c1": 3.635451896846557,
-              "c2": 0.00038801473771887216,
-              "x": "seq_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x + c2 * x^2"
-            },
-            "tail": {
-              "form": "linear",
-              "c0": 2.262445053311365,
-              "c1": 0.45455720588352,
-              "c2": 0.0,
-              "x": "seq_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x"
-            }
-          },
-          "comm_bytes": {
-            "head": {
-              "form": "quadratic",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 2048.0,
-              "x": "seq_len",
-              "unit": "bytes",
-              "expr": "c0 + c1 * x + c2 * x^2"
-            },
-            "tail": {
-              "form": "constant",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "seq_len",
-              "unit": "bytes",
-              "expr": "c0"
-            }
-          },
-          "comm_time_ms": {
-            "head": {
-              "form": "quadratic",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 0.08192,
-              "x": "seq_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x + c2 * x^2"
-            },
-            "tail": {
-              "form": "constant",
-              "c0": 0.0,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "seq_len",
-              "unit": "ms",
-              "expr": "c0"
-            }
-          }
-        }
-      }
-    },
-    {
-      "worker_name": "agx_0",
-      "modules_to_execute": [
         "layer8_attn_av",
         "layer8_o_projection",
         "layer8_up_projection",
@@ -388,141 +523,7 @@
         "layer21_attn_qk",
         "layer21_attn_av",
         "layer21_o_projection",
-        "layer21_up_projection"
-      ],
-      "stage_params": {
-        "decode": {
-          "single_model": {
-            "base_time": 44.20292285470239,
-            "increase_time": 0.06317627537563754,
-            "quadratic_time": 0.0,
-            "a": 44.20292285470239,
-            "b": 0.06317627537563754,
-            "c": 0.0,
-            "comp_time_ms": 108.89542883935523,
-            "base_size": 704512,
-            "inc_size": 0,
-            "quadratic_size": 0,
-            "size_a": 704512,
-            "size_b": 0,
-            "size_c": 0
-          }
-        },
-        "prefill": {
-          "single_model": {
-            "base_time": 54.85863638341975,
-            "increase_time": 7.15128596909943,
-            "quadratic_time": 0.006467715246729297,
-            "a": 54.85863638341975,
-            "b": 7.15128596909943,
-            "c": 0.006467715246729297,
-            "comp_time_ms": 14159.666451295656,
-            "base_size": 0,
-            "inc_size": 704512,
-            "quadratic_size": 0,
-            "size_a": 0,
-            "size_b": 704512,
-            "size_c": 0
-          }
-        },
-        "base_time": 44.20292285470239,
-        "increase_time": 0.06317627537563754,
-        "comp_time_ms": 108.89542883935523,
-        "base_size": 704512,
-        "inc_size": 0
-      },
-      "comm_bytes_to_next": 704512,
-      "comm_time_ms": 28.18048,
-      "next_worker": "2080super_0",
-      "is_last_worker": false,
-      "stage_models": {
-        "decode": {
-          "time_ms": {
-            "single": {
-              "form": "linear",
-              "c0": 44.20292285470239,
-              "c1": 0.06317627537563754,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x"
-            }
-          },
-          "comm_bytes": {
-            "single": {
-              "form": "constant",
-              "c0": 704512.0,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "bytes",
-              "expr": "c0"
-            }
-          },
-          "comm_time_ms": {
-            "single": {
-              "form": "constant",
-              "c0": 28.180480000000003,
-              "c1": 0.0,
-              "c2": 0.0,
-              "x": "context_len",
-              "unit": "ms",
-              "expr": "c0"
-            }
-          },
-          "memory_gb": {
-            "single": {
-              "form": "linear",
-              "c0": 5.099608,
-              "c1": 0.00020599365234375,
-              "c2": 0.0,
-              "x": "seq_len",
-              "batch_term": "batch_size",
-              "unit": "GB",
-              "expr": "c0 + c1 * seq_len * batch_size"
-            }
-          }
-        },
-        "prefill": {
-          "time_ms": {
-            "single": {
-              "form": "quadratic",
-              "c0": 54.85863638341975,
-              "c1": 7.15128596909943,
-              "c2": 0.006467715246729297,
-              "x": "seq_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x + c2 * x^2"
-            }
-          },
-          "comm_bytes": {
-            "single": {
-              "form": "linear",
-              "c0": 0.0,
-              "c1": 704512.0,
-              "c2": 0.0,
-              "x": "seq_len",
-              "unit": "bytes",
-              "expr": "c0 + c1 * x"
-            }
-          },
-          "comm_time_ms": {
-            "single": {
-              "form": "linear",
-              "c0": 0.0,
-              "c1": 28.180480000000003,
-              "c2": 0.0,
-              "x": "seq_len",
-              "unit": "ms",
-              "expr": "c0 + c1 * x"
-            }
-          }
-        }
-      }
-    },
-    {
-      "worker_name": "2080super_0",
-      "modules_to_execute": [
+        "layer21_up_projection",
         "layer21_down_projection",
         "layer22_qkv_projection",
         "layer22_attn_qk",
@@ -562,33 +563,18 @@
         "layer27_down_projection",
         "layer28_qkv_projection",
         "layer28_attn_qk",
-        "layer28_attn_av",
-        "layer28_o_projection",
-        "layer28_up_projection",
-        "layer28_down_projection",
-        "layer29_qkv_projection",
-        "layer29_attn_qk",
-        "layer29_attn_av",
-        "layer29_o_projection",
-        "layer29_up_projection",
-        "layer29_down_projection",
-        "layer30_qkv_projection",
-        "layer30_attn_qk",
-        "layer30_attn_av",
-        "layer30_o_projection",
-        "layer30_up_projection",
-        "layer30_down_projection"
+        "layer28_attn_av"
       ],
       "stage_params": {
         "decode": {
           "single_model": {
-            "base_time": 16.05780100839763,
-            "increase_time": 0.01234866082427733,
+            "base_time": 79.13845870738075,
+            "increase_time": 0.11469133328025675,
             "quadratic_time": 0.0,
-            "a": 16.05780100839763,
-            "b": 0.01234866082427733,
+            "a": 79.13845870738075,
+            "b": 0.11469133328025675,
             "c": 0.0,
-            "comp_time_ms": 28.702829692457613,
+            "comp_time_ms": 196.58238398636365,
             "base_size": 262144,
             "inc_size": 0,
             "quadratic_size": 0,
@@ -599,13 +585,13 @@
         },
         "prefill": {
           "single_model": {
-            "base_time": 0.0,
-            "increase_time": 3.1941363511247496,
-            "quadratic_time": 0.0005364905238045117,
-            "a": 0.0,
-            "b": 3.1941363511247496,
-            "c": 0.0005364905238045117,
-            "comp_time_ms": 3833.346711040583,
+            "base_time": 98.12926594276831,
+            "increase_time": 12.735397256293306,
+            "quadratic_time": 0.01169363397838861,
+            "a": 98.12926594276831,
+            "b": 12.735397256293306,
+            "c": 0.01169363397838861,
+            "comp_time_ms": 25400.839998909927,
             "base_size": 0,
             "inc_size": 262144,
             "quadratic_size": 0,
@@ -614,23 +600,23 @@
             "size_c": 0
           }
         },
-        "base_time": 16.05780100839763,
-        "increase_time": 0.01234866082427733,
-        "comp_time_ms": 28.702829692457613,
+        "base_time": 79.13845870738075,
+        "increase_time": 0.11469133328025675,
+        "comp_time_ms": 196.58238398636365,
         "base_size": 262144,
         "inc_size": 0
       },
       "comm_bytes_to_next": 262144,
       "comm_time_ms": 10.48576,
-      "next_worker": "tx2_0",
+      "next_worker": "2080super_0",
       "is_last_worker": false,
       "stage_models": {
         "decode": {
           "time_ms": {
             "single": {
               "form": "linear",
-              "c0": 16.05780100839763,
-              "c1": 0.01234866082427733,
+              "c0": 79.13845870738075,
+              "c1": 0.11469133328025675,
               "c2": 0.0,
               "x": "context_len",
               "unit": "ms",
@@ -662,8 +648,8 @@
           "memory_gb": {
             "single": {
               "form": "linear",
-              "c0": 3.476561,
-              "c1": 0.0001373291015625,
+              "c0": 9.046871999999999,
+              "c1": 0.00037384033203125,
               "c2": 0.0,
               "x": "seq_len",
               "batch_term": "batch_size",
@@ -676,9 +662,9 @@
           "time_ms": {
             "single": {
               "form": "quadratic",
-              "c0": 0.0,
-              "c1": 3.1941363511247496,
-              "c2": 0.0005364905238045117,
+              "c0": 98.12926594276831,
+              "c1": 12.735397256293306,
+              "c2": 0.01169363397838861,
               "x": "seq_len",
               "unit": "ms",
               "expr": "c0 + c1 * x + c2 * x^2"
@@ -710,57 +696,73 @@
       }
     },
     {
-      "worker_name": "tx2_0",
+      "worker_name": "2080super_0",
       "modules_to_execute": [
+        "layer28_o_projection",
+        "layer28_up_projection",
+        "layer28_down_projection",
+        "layer29_qkv_projection",
+        "layer29_attn_qk",
+        "layer29_attn_av",
+        "layer29_o_projection",
+        "layer29_up_projection",
+        "layer29_down_projection",
+        "layer30_qkv_projection",
+        "layer30_attn_qk",
+        "layer30_attn_av",
+        "layer30_o_projection",
+        "layer30_up_projection",
+        "layer30_down_projection",
         "layer31_qkv_projection",
         "layer31_attn_qk",
         "layer31_attn_av",
         "layer31_o_projection",
-        "layer31_up_projection"
+        "layer31_up_projection",
+        "layer31_down_projection"
       ],
       "stage_params": {
         "decode": {
           "single_model": {
-            "base_time": 61.37345469368994,
-            "increase_time": 0.034132939144968975,
+            "base_time": 6.289631328705674,
+            "increase_time": 0.00411622027475911,
             "quadratic_time": 0.0,
-            "a": 61.37345469368994,
-            "b": 0.034132939144968975,
+            "a": 6.289631328705674,
+            "b": 0.00411622027475911,
             "c": 0.0,
-            "comp_time_ms": 96.32558437813817,
-            "base_size": 704512,
+            "comp_time_ms": 10.504640890059003,
+            "base_size": 262144,
             "inc_size": 0,
             "quadratic_size": 0,
-            "size_a": 704512,
+            "size_a": 262144,
             "size_b": 0,
             "size_c": 0
           }
         },
         "prefill": {
           "single_model": {
-            "base_time": 38.56064117773679,
-            "increase_time": 21.60295547527853,
-            "quadratic_time": 0.0018069648190694218,
-            "a": 38.56064117773679,
-            "b": 21.60295547527853,
-            "c": 0.0018069648190694218,
-            "comp_time_ms": 24054.72698998349,
+            "base_time": 0.0,
+            "increase_time": 1.2887779466443192,
+            "quadratic_time": 0.00017883017460150396,
+            "a": 0.0,
+            "b": 1.2887779466443192,
+            "c": 0.00017883017460150396,
+            "comp_time_ms": 1507.2256465267294,
             "base_size": 0,
-            "inc_size": 704512,
+            "inc_size": 262144,
             "quadratic_size": 0,
             "size_a": 0,
-            "size_b": 704512,
+            "size_b": 262144,
             "size_c": 0
           }
         },
-        "base_time": 61.37345469368994,
-        "increase_time": 0.034132939144968975,
-        "comp_time_ms": 96.32558437813817,
-        "base_size": 704512,
+        "base_time": 6.289631328705674,
+        "increase_time": 0.00411622027475911,
+        "comp_time_ms": 10.504640890059003,
+        "base_size": 262144,
         "inc_size": 0
       },
-      "comm_bytes_to_next": 704512,
-      "comm_time_ms": 28.18048,
+      "comm_bytes_to_next": 262144,
+      "comm_time_ms": 10.48576,
       "next_worker": "3060_0",
       "is_last_worker": true,
       "stage_models": {
@@ -768,8 +770,8 @@
           "time_ms": {
             "single": {
               "form": "linear",
-              "c0": 61.37345469368994,
-              "c1": 0.034132939144968975,
+              "c0": 6.289631328705674,
+              "c1": 0.00411622027475911,
               "c2": 0.0,
               "x": "context_len",
               "unit": "ms",
@@ -779,7 +781,7 @@
           "comm_bytes": {
             "single": {
               "form": "constant",
-              "c0": 704512.0,
+              "c0": 262144.0,
               "c1": 0.0,
               "c2": 0.0,
               "x": "context_len",
@@ -790,7 +792,7 @@
           "comm_time_ms": {
             "single": {
               "form": "constant",
-              "c0": 28.180480000000003,
+              "c0": 10.48576,
               "c1": 0.0,
               "c2": 0.0,
               "x": "context_len",
@@ -801,8 +803,8 @@
           "memory_gb": {
             "single": {
               "form": "linear",
-              "c0": 0.29296900000000003,
-              "c1": 1.52587890625e-05,
+              "c0": 1.4140620000000002,
+              "c1": 4.57763671875e-05,
               "c2": 0.0,
               "x": "seq_len",
               "batch_term": "batch_size",
@@ -815,9 +817,9 @@
           "time_ms": {
             "single": {
               "form": "quadratic",
-              "c0": 38.56064117773679,
-              "c1": 21.60295547527853,
-              "c2": 0.0018069648190694218,
+              "c0": 0.0,
+              "c1": 1.2887779466443192,
+              "c2": 0.00017883017460150396,
               "x": "seq_len",
               "unit": "ms",
               "expr": "c0 + c1 * x + c2 * x^2"
@@ -827,7 +829,7 @@
             "single": {
               "form": "linear",
               "c0": 0.0,
-              "c1": 704512.0,
+              "c1": 262144.0,
               "c2": 0.0,
               "x": "seq_len",
               "unit": "bytes",
@@ -838,7 +840,7 @@
             "single": {
               "form": "linear",
               "c0": 0.0,
-              "c1": 28.180480000000003,
+              "c1": 10.48576,
               "c2": 0.0,
               "x": "seq_len",
               "unit": "ms",

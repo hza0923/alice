@@ -59,6 +59,7 @@ class FlexiblePipelineScheduler:
         use_fine_grained: bool = True,
         designated_tail_n: int = 1,
         strategy_output_path: Optional[str] = None,
+        max_seq_len: Optional[int] = None,
     ):
         self.logger = setup_logger("Scheduler")
         self.model_cfg = model_config
@@ -72,6 +73,11 @@ class FlexiblePipelineScheduler:
         if self.designated_tail_n < 1:
             raise ValueError("designated_tail_n must be >= 1")
         self.strategy_output_path = strategy_output_path
+        # KV / attention buffer scheduling cap: when set, memory checks use this seq length
+        # instead of target_seq_len (compute time still uses target_seq_len).
+        self.max_seq_len = int(max_seq_len) if max_seq_len is not None else None
+        if self.max_seq_len is not None and self.max_seq_len < 1:
+            raise ValueError("max_seq_len must be >= 1 when set")
 
         self._decoder_modules: List[str] = list(self.model_cfg["component_config"]["decoder_layer"])
         self.layer_names = self._build_layer_names()
@@ -254,6 +260,9 @@ class FlexiblePipelineScheduler:
 
         if not quiet:
             self.logger.info("开始调度: bs=%s seq_len=%s tail_n=%s", bs, target_seq_len, k)
+        mem_seq_len = self.max_seq_len if self.max_seq_len is not None else target_seq_len
+        if not quiet and mem_seq_len != target_seq_len:
+            self.logger.info("KV 显存估算 seq_len=%s（与计算用的 target_seq_len=%s 分离）", mem_seq_len, target_seq_len)
         latencies = {
             dev: [self._get_layer_latency(dev, layer, target_seq_len, bs) for layer in self.layer_names]
             for dev in self.device_group
@@ -274,7 +283,7 @@ class FlexiblePipelineScheduler:
         for i in range(0, n_layers - k - 1):
             prefix_layers = list(range(i + 1))
             dd_layers = prefix_layers + suffix_layers
-            if not self._check_memory(self.designated_device, dd_layers, bs, seq_len=target_seq_len):
+            if not self._check_memory(self.designated_device, dd_layers, bs, seq_len=mem_seq_len):
                 continue
             dd_comp_time = sum(latencies[self.designated_device][idx] for idx in dd_layers)
             dd_idx = all_device_types.index(self.designated_device)
@@ -297,7 +306,7 @@ class FlexiblePipelineScheduler:
                     for m_prev in range(0, m_curr):
                         start_layer = m_prev + 1
                         layer_indices = list(range(start_layer, m_curr + 1))
-                        if not self._check_memory(d_curr, layer_indices, bs, seq_len=target_seq_len):
+                        if not self._check_memory(d_curr, layer_indices, bs, seq_len=mem_seq_len):
                             continue
                         curr_comp_time = sum(latencies[d_curr][idx] for idx in layer_indices)
                         for d_prev in all_device_types:
@@ -341,7 +350,9 @@ class FlexiblePipelineScheduler:
 
         if not quiet:
             self.logger.info("最优调度完成，全局 TBT=%.2f ms", best_global_tbt)
-        strategy = self._build_strategy_file(best_global_alloc, best_global_tbt, bs, target_seq_len)
+        strategy = self._build_strategy_file(
+            best_global_alloc, best_global_tbt, bs, target_seq_len, mem_seq_len=mem_seq_len
+        )
         if self.strategy_output_path:
             Path(self.strategy_output_path).parent.mkdir(parents=True, exist_ok=True)
             with open(self.strategy_output_path, "w", encoding="utf-8") as f:
@@ -431,7 +442,15 @@ class FlexiblePipelineScheduler:
             "expr": "c0",
         }
 
-    def _build_strategy_file(self, allocation: Dict[str, Any], tbt: float, bs: int, target_seq_len: int) -> Dict[str, Any]:
+    def _build_strategy_file(
+        self,
+        allocation: Dict[str, Any],
+        tbt: float,
+        bs: int,
+        target_seq_len: int,
+        *,
+        mem_seq_len: int,
+    ) -> Dict[str, Any]:
         flat_stages: List[Dict[str, Any]] = []
         for dev_type, instances in allocation.items():
             for inst_id, layers in instances.items():
@@ -734,6 +753,8 @@ class FlexiblePipelineScheduler:
             "schedule_input": {
                 "bs": bs,
                 "target_seq_len": target_seq_len,
+                "max_seq_len": self.max_seq_len,
+                "kv_memory_seq_len": mem_seq_len,
                 "designated_device": self.designated_device,
                 "designated_tail_n": self.designated_tail_n,
                 "use_fine_grained": self.use_fine_grained,

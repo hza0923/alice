@@ -1332,7 +1332,7 @@
     "agx": {
       "device_type": "agx",
       "model": "llama2-7b",
-      "memory_gb": 32.0,
+      "memory_gb": 64.0,
       "modules": {
         "input_embed": {
           "weight_size_gb": 0.244141,

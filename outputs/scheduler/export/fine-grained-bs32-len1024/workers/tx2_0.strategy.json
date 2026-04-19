@@ -1,15 +1,17 @@
 {
   "schema_version": "worker_strategy.v1",
-  "generated_at": "2026-04-19T01:44:51Z",
+  "generated_at": "2026-04-19T02:49:15Z",
   "worker_name": "tx2_0",
   "global_strategy_ref": "pipeline_strategy.json",
   "execution_plan": {
     "head_ordered_modules": [
-      "qkv_projection",
       "attn_qk",
       "attn_av",
       "o_projection",
-      "up_projection"
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk"
     ],
     "tail_ordered_modules": [],
     "phase_rules": {

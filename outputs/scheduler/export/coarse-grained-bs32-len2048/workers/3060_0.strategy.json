@@ -1,13 +1,11 @@
 {
   "schema_version": "worker_strategy.v1",
-  "generated_at": "2026-04-19T01:46:53Z",
+  "generated_at": "2026-04-19T02:51:32Z",
   "worker_name": "3060_0",
   "global_strategy_ref": "pipeline_strategy.json",
   "execution_plan": {
     "head_ordered_modules": [
       "input_embed",
-      "decoder_layer",
-      "decoder_layer",
       "decoder_layer",
       "decoder_layer",
       "decoder_layer"

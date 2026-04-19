@@ -21,6 +21,7 @@ def solve_with_tail_sweep(
     use_fine_grained: bool,
     tail_candidates: List[int],
     strategy_output_path: Optional[str] = None,
+    max_seq_len: Optional[int] = None,
 ) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     best: Optional[Dict[str, Any]] = None
     best_n: Optional[int] = None
@@ -39,6 +40,7 @@ def solve_with_tail_sweep(
             use_fine_grained=use_fine_grained,
             designated_tail_n=n,
             strategy_output_path=None,
+            max_seq_len=max_seq_len,
         )
         strat = sch.schedule(bs, target_seq_len, quiet=False)
         row = {"designated_tail_n": n, "feasible": strat is not None}

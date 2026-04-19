@@ -1,0 +1,45 @@
+{
+  "schema_version": "worker_strategy.v1",
+  "generated_at": "2026-04-19T02:44:08Z",
+  "worker_name": "3060_0",
+  "global_strategy_ref": "pipeline_strategy.json",
+  "execution_plan": {
+    "head_ordered_modules": [
+      "input_embed",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection",
+      "up_projection",
+      "down_projection",
+      "qkv_projection"
+    ],
+    "tail_ordered_modules": [
+      "lm_head"
+    ],
+    "phase_rules": {
+      "prefill": {
+        "enabled": true
+      },
+      "decode": {
+        "enabled": true
+      }
+    },
+    "transfer_policy": {
+      "compute_payload_bytes_locally": true,
+      "formula_ref": "model_config.comm_contract.v1"
+    }
+  }
+}

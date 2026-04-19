@@ -2,7 +2,7 @@
   "timestamp": "2026-03-19 18:42:12",
   "model": "llama2-7b",
   "device": "agx",
-  "device_memory_gb": 32,
+  "device_memory_gb": 64,
   "test_configurations": [
     {
       "batch_size": 1,
