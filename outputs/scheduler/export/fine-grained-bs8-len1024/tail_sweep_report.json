@@ -1,0 +1,41 @@
+{
+  "candidates": [
+    {
+      "designated_tail_n": 1,
+      "feasible": true,
+      "tbt_ms": 61.182844321649036
+    },
+    {
+      "designated_tail_n": 2,
+      "feasible": true,
+      "tbt_ms": 60.573145221877354
+    },
+    {
+      "designated_tail_n": 3,
+      "feasible": true,
+      "tbt_ms": 59.97978663826526
+    },
+    {
+      "designated_tail_n": 4,
+      "feasible": true,
+      "tbt_ms": 59.70400383841411
+    },
+    {
+      "designated_tail_n": 5,
+      "feasible": true,
+      "tbt_ms": 60.89245857868508
+    },
+    {
+      "designated_tail_n": 6,
+      "feasible": true,
+      "tbt_ms": 61.79838235831053
+    },
+    {
+      "designated_tail_n": 7,
+      "feasible": true,
+      "tbt_ms": 61.182844321649036
+    }
+  ],
+  "best_designated_tail_n": 4,
+  "best_tbt_ms": 59.70400383841411
+}

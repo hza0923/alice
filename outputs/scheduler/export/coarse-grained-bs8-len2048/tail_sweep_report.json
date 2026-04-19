@@ -1,0 +1,11 @@
+{
+  "candidates": [
+    {
+      "designated_tail_n": 1,
+      "feasible": true,
+      "tbt_ms": 79.72263122902083
+    }
+  ],
+  "best_designated_tail_n": 1,
+  "best_tbt_ms": 79.72263122902083
+}

@@ -1,0 +1,560 @@
+{
+  "schema_version": "pipeline_strategy.v2",
+  "generated_at": "2026-04-19T04:19:22Z",
+  "model": {
+    "name": "llama2-7b",
+    "num_layers": 32,
+    "hidden_size": 4096,
+    "n_head": 32,
+    "n_kv_head": 32,
+    "ffn_dim": 11008,
+    "vocab_size": 32000,
+    "dtype_bytes": 2
+  },
+  "schedule_input": {
+    "bs": 8,
+    "target_seq_len": 256,
+    "max_seq_len": 4096,
+    "kv_memory_seq_len": 4096,
+    "designated_device": "3060",
+    "designated_tail_n": 1,
+    "use_fine_grained": false
+  },
+  "objective": {
+    "name": "min_tbt_ms",
+    "value": 54.03749089366278
+  },
+  "tbt_ms": 54.03749089366278,
+  "pipeline_stages": [
+    {
+      "worker_name": "3060_0",
+      "modules_to_execute": [
+        "input_embed_input_embed",
+        "layer0_decoder_layer",
+        "layer1_decoder_layer",
+        "layer2_decoder_layer",
+        "layer3_decoder_layer",
+        "layer4_decoder_layer",
+        "layer5_decoder_layer",
+        "layer6_decoder_layer",
+        "layer7_decoder_layer",
+        "output_embed_lm_head"
+      ],
+      "stage_params": {
+        "decode": {
+          "head_model": {
+            "base_time": 15.432007207352928,
+            "increase_time": 0.003655805492322007,
+            "quadratic_time": 0.0,
+            "a": 15.432007207352928,
+            "b": 0.003655805492322007,
+            "c": 0.0,
+            "comp_time_ms": 16.36789341338736,
+            "base_size": 65536,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 65536,
+            "size_b": 0,
+            "size_c": 0
+          },
+          "tail_model": {
+            "base_time": 0.9375912404805422,
+            "increase_time": 0.0,
+            "quadratic_time": 0.0,
+            "a": 0.9375912404805422,
+            "b": 0.0,
+            "c": 0.0,
+            "comp_time_ms": 0.9375912404805422,
+            "base_size": 0,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 0,
+            "size_c": 0
+          }
+        },
+        "prefill": {
+          "head_model": {
+            "base_time": 20.166078295887118,
+            "increase_time": 0.8473932824989049,
+            "quadratic_time": 0.00010687679776554652,
+            "a": 20.166078295887118,
+            "b": 0.8473932824989049,
+            "c": 0.00010687679776554652,
+            "comp_time_ms": 244.1030364339696,
+            "base_size": 0,
+            "inc_size": 65536,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 65536,
+            "size_c": 0
+          },
+          "tail_model": {
+            "base_time": 1.8347278156757234,
+            "increase_time": 0.08454852194786072,
+            "quadratic_time": 0.0,
+            "a": 1.8347278156757234,
+            "b": 0.08454852194786072,
+            "c": 0.0,
+            "comp_time_ms": 23.47914943432807,
+            "base_size": 0,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 0,
+            "size_c": 0
+          }
+        },
+        "base_time": 16.36959844783347,
+        "increase_time": 0.003655805492322007,
+        "comp_time_ms": 17.305484653867904,
+        "base_size": 65536,
+        "inc_size": 0
+      },
+      "comm_bytes_to_next": 65536,
+      "comm_time_ms": 2.62144,
+      "next_worker": "agx_0",
+      "is_last_worker": false,
+      "stage_models": {
+        "decode": {
+          "time_ms": {
+            "head": {
+              "form": "linear",
+              "c0": 15.432007207352928,
+              "c1": 0.003655805492322007,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.9375912404805422,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "comm_bytes": {
+            "head": {
+              "form": "constant",
+              "c0": 65536.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "head": {
+              "form": "constant",
+              "c0": 2.62144,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "head": {
+              "form": "linear",
+              "c0": 3.5039059999999997,
+              "c1": 0.0001220703125,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            },
+            "tail": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
+          }
+        },
+        "prefill": {
+          "time_ms": {
+            "head": {
+              "form": "quadratic",
+              "c0": 20.166078295887118,
+              "c1": 0.8473932824989049,
+              "c2": 0.00010687679776554652,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            },
+            "tail": {
+              "form": "linear",
+              "c0": 1.8347278156757234,
+              "c1": 0.08454852194786072,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_bytes": {
+            "head": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 65536.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "head": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2.62144,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            },
+            "tail": {
+              "form": "constant",
+              "c0": 0.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          }
+        }
+      }
+    },
+    {
+      "worker_name": "agx_0",
+      "modules_to_execute": [
+        "layer8_decoder_layer",
+        "layer9_decoder_layer",
+        "layer10_decoder_layer",
+        "layer11_decoder_layer",
+        "layer12_decoder_layer",
+        "layer13_decoder_layer",
+        "layer14_decoder_layer",
+        "layer15_decoder_layer",
+        "layer16_decoder_layer",
+        "layer17_decoder_layer",
+        "layer18_decoder_layer",
+        "layer19_decoder_layer",
+        "layer20_decoder_layer",
+        "layer21_decoder_layer",
+        "layer22_decoder_layer"
+      ],
+      "stage_params": {
+        "decode": {
+          "single_model": {
+            "base_time": 49.554688894437966,
+            "increase_time": 0.017510945309471993,
+            "quadratic_time": 0.0,
+            "a": 49.554688894437966,
+            "b": 0.017510945309471993,
+            "c": 0.0,
+            "comp_time_ms": 54.0374908936628,
+            "base_size": 65536,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 65536,
+            "size_b": 0,
+            "size_c": 0
+          }
+        },
+        "prefill": {
+          "single_model": {
+            "base_time": 67.84376715001154,
+            "increase_time": 2.0314155265387477,
+            "quadratic_time": 0.0017780116112409198,
+            "a": 67.84376715001154,
+            "b": 2.0314155265387477,
+            "c": 0.0017780116112409198,
+            "comp_time_ms": 704.4099108982159,
+            "base_size": 0,
+            "inc_size": 65536,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 65536,
+            "size_c": 0
+          }
+        },
+        "base_time": 49.554688894437966,
+        "increase_time": 0.017510945309471993,
+        "comp_time_ms": 54.0374908936628,
+        "base_size": 65536,
+        "inc_size": 0
+      },
+      "comm_bytes_to_next": 65536,
+      "comm_time_ms": 2.62144,
+      "next_worker": "2080super_0",
+      "is_last_worker": false,
+      "stage_models": {
+        "decode": {
+          "time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 49.554688894437966,
+              "c1": 0.017510945309471993,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_bytes": {
+            "single": {
+              "form": "constant",
+              "c0": 65536.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "constant",
+              "c0": 2.62144,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "single": {
+              "form": "linear",
+              "c0": 5.654295000000001,
+              "c1": 0.0002288818359375,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
+          }
+        },
+        "prefill": {
+          "time_ms": {
+            "single": {
+              "form": "quadratic",
+              "c0": 67.84376715001154,
+              "c1": 2.0314155265387477,
+              "c2": 0.0017780116112409198,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            }
+          },
+          "comm_bytes": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 65536.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2.62144,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          }
+        }
+      }
+    },
+    {
+      "worker_name": "2080super_0",
+      "modules_to_execute": [
+        "layer23_decoder_layer",
+        "layer24_decoder_layer",
+        "layer25_decoder_layer",
+        "layer26_decoder_layer",
+        "layer27_decoder_layer",
+        "layer28_decoder_layer",
+        "layer29_decoder_layer",
+        "layer30_decoder_layer",
+        "layer31_decoder_layer"
+      ],
+      "stage_params": {
+        "decode": {
+          "single_model": {
+            "base_time": 15.620924563289032,
+            "increase_time": 0.003136687462800477,
+            "quadratic_time": 0.0,
+            "a": 15.620924563289032,
+            "b": 0.003136687462800477,
+            "c": 0.0,
+            "comp_time_ms": 16.423916553765952,
+            "base_size": 65536,
+            "inc_size": 0,
+            "quadratic_size": 0,
+            "size_a": 65536,
+            "size_b": 0,
+            "size_c": 0
+          }
+        },
+        "prefill": {
+          "single_model": {
+            "base_time": 19.521486809919562,
+            "increase_time": 0.7261908349373296,
+            "quadratic_time": 0.00013359512481758405,
+            "a": 19.521486809919562,
+            "b": 0.7261908349373296,
+            "c": 0.00013359512481758405,
+            "comp_time_ms": 214.18163065392113,
+            "base_size": 0,
+            "inc_size": 65536,
+            "quadratic_size": 0,
+            "size_a": 0,
+            "size_b": 65536,
+            "size_c": 0
+          }
+        },
+        "base_time": 15.620924563289032,
+        "increase_time": 0.003136687462800477,
+        "comp_time_ms": 16.423916553765952,
+        "base_size": 65536,
+        "inc_size": 0
+      },
+      "comm_bytes_to_next": 65536,
+      "comm_time_ms": 2.62144,
+      "next_worker": "3060_0",
+      "is_last_worker": true,
+      "stage_models": {
+        "decode": {
+          "time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 15.620924563289032,
+              "c1": 0.003136687462800477,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_bytes": {
+            "single": {
+              "form": "constant",
+              "c0": 65536.0,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "bytes",
+              "expr": "c0"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "constant",
+              "c0": 2.62144,
+              "c1": 0.0,
+              "c2": 0.0,
+              "x": "context_len",
+              "unit": "ms",
+              "expr": "c0"
+            }
+          },
+          "memory_gb": {
+            "single": {
+              "form": "linear",
+              "c0": 3.392577,
+              "c1": 0.0001373291015625,
+              "c2": 0.0,
+              "x": "seq_len",
+              "batch_term": "batch_size",
+              "unit": "GB",
+              "expr": "c0 + c1 * seq_len * batch_size"
+            }
+          }
+        },
+        "prefill": {
+          "time_ms": {
+            "single": {
+              "form": "quadratic",
+              "c0": 19.521486809919562,
+              "c1": 0.7261908349373296,
+              "c2": 0.00013359512481758405,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x + c2 * x^2"
+            }
+          },
+          "comm_bytes": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 65536.0,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "bytes",
+              "expr": "c0 + c1 * x"
+            }
+          },
+          "comm_time_ms": {
+            "single": {
+              "form": "linear",
+              "c0": 0.0,
+              "c1": 2.62144,
+              "c2": 0.0,
+              "x": "seq_len",
+              "unit": "ms",
+              "expr": "c0 + c1 * x"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
