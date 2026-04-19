@@ -153,10 +153,12 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
                 message="master is draining after pipeline-stop; new tasks are rejected",
             )
         self._latency.mark_submit(request.req_id)
+        # First ingress uses prefill timing on worker0 head; last stage flips to decode
+        # when forwarding back toward worker0 (see worker DataPlaneServicer).
         frame = pv2.Frame(
             req_id=request.req_id,
             step_id=0,
-            phase=pv2.PHASE_DECODE,
+            phase=pv2.PHASE_PREFILL,
             context_len=request.context_len,
             target_len=request.target_len,
             batch_size=request.batch_size or 1,

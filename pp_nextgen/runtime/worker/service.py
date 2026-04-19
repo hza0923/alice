@@ -566,6 +566,8 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             self._open_requests.discard(frame.req_id)
             self._model.close_kv_session(frame.req_id)
             return
+        # After tail compute on the prefill lap, switch ring to decode for subsequent head hops.
+        next_phase = pv2.PHASE_DECODE if frame.phase == pv2.PHASE_PREFILL else frame.phase
         out = _copy_frame(
             frame,
             step_id=frame.step_id + 1,
@@ -574,6 +576,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             end_of_request=False,
             pipeline_stop=False,
             ring_return=False,
+            phase=next_phase,
         )
         await self._head_queue.put(out)
 
