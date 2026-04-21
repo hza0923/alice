@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,62 @@ def generate_poisson_requests(
         out.append(
             SimRequest(
                 req_id=f"{req_id_prefix}-{idx+1}",
+                arrival_ts=now,
+                batch_size=batch_size,
+                context_len=context_len,
+                target_len=target_len,
+            )
+        )
+        idx += 1
+        now += rng.expovariate(rate_per_sec)
+    return out
+
+
+def generate_poisson_requests_from_specs(
+    *,
+    specs: List[Dict[str, Any]],
+    rate_per_sec: float,
+    duration_s: Optional[float],
+    num_requests: Optional[int],
+    batch_size: int,
+    seed: int,
+    req_id_prefix: str = "req",
+) -> List[SimRequest]:
+    """Poisson arrivals; cycle through `specs` for (context_len, target_len, optional req_id)."""
+    if not specs:
+        raise ValueError("specs must be non-empty")
+    if rate_per_sec <= 0:
+        raise ValueError("rate_per_sec must be > 0")
+    if duration_s is None and num_requests is None:
+        raise ValueError("either duration_s or num_requests must be provided")
+    if duration_s is not None and duration_s <= 0:
+        raise ValueError("duration_s must be > 0")
+    if num_requests is not None and num_requests <= 0:
+        raise ValueError("num_requests must be > 0")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be > 0")
+
+    rng = random.Random(seed)
+    out: List[SimRequest] = []
+    now = 0.0
+    idx = 0
+    while True:
+        if num_requests is not None and idx >= num_requests:
+            break
+        if duration_s is not None and now > duration_s:
+            break
+        spec = specs[idx % len(specs)]
+        context_len = int(spec["context_len"])
+        target_len = int(spec["target_len"])
+        if context_len <= 0:
+            raise ValueError("context_len must be > 0")
+        if target_len < context_len:
+            raise ValueError("target_len must be >= context_len")
+        rid = spec.get("req_id")
+        req_id = str(rid) if rid is not None else f"{req_id_prefix}-{idx + 1}"
+        out.append(
+            SimRequest(
+                req_id=req_id,
                 arrival_ts=now,
                 batch_size=batch_size,
                 context_len=context_len,

@@ -73,7 +73,10 @@ def _parse() -> argparse.Namespace:
     p.add_argument(
         "--request-spec-file",
         default=None,
-        help="Path to JSON array: [{req_id?, batch_size, context_len, target_len}, ...]",
+        help=(
+            "Path to JSON: either a list [{req_id?, batch_size, context_len, target_len}, ...] "
+            "or unified_dataset_requests.v1 {\"schema_version\", \"requests\": [...]}"
+        ),
     )
 
     ns = p.parse_args()
@@ -109,29 +112,12 @@ def _random_spec(args: argparse.Namespace, rng: random.Random) -> Dict[str, int]
 
 
 def _load_file_specs(path: str) -> List[Dict[str, Any]]:
+    from pp_nextgen.datasets.unified_requests import normalize_json_payload_to_submit_specs
+
     p = Path(path)
     with p.open("r", encoding="utf-8") as f:
         data = json.load(f)
-    if not isinstance(data, list):
-        raise ValueError("request spec file must be a JSON list")
-    out: List[Dict[str, Any]] = []
-    for i, item in enumerate(data):
-        if not isinstance(item, dict):
-            raise ValueError(f"entry[{i}] must be an object")
-        b = _positive_int(f"entry[{i}].batch_size", int(item["batch_size"]))
-        c = _non_negative_int(f"entry[{i}].context_len", int(item["context_len"]))
-        t = _non_negative_int(f"entry[{i}].target_len", int(item["target_len"]))
-        out.append(
-            {
-                "req_id": item.get("req_id"),
-                "batch_size": b,
-                "context_len": c,
-                "target_len": max(c, t),
-            }
-        )
-    if not out:
-        raise ValueError("request spec file is empty")
-    return out
+    return normalize_json_payload_to_submit_specs(data)
 
 
 def main() -> None:
@@ -151,7 +137,14 @@ def main() -> None:
             elif args.mode == "random":
                 spec = _random_spec(args, rng)
             else:
-                spec = file_specs[idx % len(file_specs)]
+                row = file_specs[idx % len(file_specs)]
+                bs = row.get("batch_size", args.batch_size)
+                spec = {
+                    "req_id": row.get("req_id"),
+                    "batch_size": _positive_int("batch_size", int(bs)),
+                    "context_len": int(row["context_len"]),
+                    "target_len": int(row["target_len"]),
+                }
 
             req_id = str(spec.get("req_id") or f"{args.req_prefix}-{idx + 1}")
             req = pv2.TaskSubmitRequest(

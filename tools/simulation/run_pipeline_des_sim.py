@@ -14,7 +14,12 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 from pp_nextgen.runtime.strategy import load_pipeline_strategy
-from pp_nextgen.simulation import DESConfig, PipelineDESSimulator, generate_poisson_requests
+from pp_nextgen.simulation import (
+    DESConfig,
+    PipelineDESSimulator,
+    generate_poisson_requests,
+    generate_poisson_requests_from_specs,
+)
 
 
 def _parse_link_overrides(raw: str) -> Dict[str, float]:
@@ -47,8 +52,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--duration-s", type=float, default=10.0, help="Simulation arrival horizon in seconds")
     p.add_argument("--num-requests", type=int, default=0, help="Optional hard cap; 0 means unlimited by count")
     p.add_argument("--batch-size", type=int, default=1, help="Per-request batch size")
-    p.add_argument("--context-len", type=int, default=128, help="Per-request context length")
-    p.add_argument("--target-len", type=int, default=256, help="Per-request target length")
+    p.add_argument(
+        "--request-file",
+        default="",
+        help=(
+            "Optional JSON path: unified_dataset_requests.v1 or legacy submit list; "
+            "uses Poisson --arrival-rate and --batch-size; cycles rows. "
+            "When set, --context-len and --target-len are ignored."
+        ),
+    )
+    p.add_argument("--context-len", type=int, default=128, help="Per-request context length (synthetic workload)")
+    p.add_argument("--target-len", type=int, default=256, help="Per-request target length (synthetic workload)")
     p.add_argument("--max-batch-size", type=int, default=32, help="Contiguous batch upper bound")
     p.add_argument("--packing-window-ms", type=float, default=0.0, help="Optional short wait to pack contiguous requests")
     p.add_argument("--default-link-bandwidth-gbps", type=float, default=0.1, help="Fallback link bandwidth")
@@ -99,15 +113,38 @@ def main() -> int:
         return 2
 
     strategy = load_pipeline_strategy(strategy_path)
-    requests = generate_poisson_requests(
-        rate_per_sec=float(args.arrival_rate),
-        duration_s=duration_s,
-        num_requests=num_requests,
-        batch_size=int(args.batch_size),
-        context_len=int(args.context_len),
-        target_len=int(args.target_len),
-        seed=int(args.seed),
-    )
+    trace_path = (args.request_file or "").strip()
+    if trace_path:
+        from pp_nextgen.datasets.unified_requests import load_simulation_specs_from_json_path
+
+        rp = Path(trace_path)
+        if not rp.is_absolute():
+            rp = (_REPO / rp).resolve()
+        if not rp.is_file():
+            print(f"request file not found: {rp}", file=sys.stderr)
+            return 2
+        specs = load_simulation_specs_from_json_path(rp)
+        if not specs:
+            print("request file produced no specs", file=sys.stderr)
+            return 2
+        requests = generate_poisson_requests_from_specs(
+            specs=specs,
+            rate_per_sec=float(args.arrival_rate),
+            duration_s=duration_s,
+            num_requests=num_requests,
+            batch_size=int(args.batch_size),
+            seed=int(args.seed),
+        )
+    else:
+        requests = generate_poisson_requests(
+            rate_per_sec=float(args.arrival_rate),
+            duration_s=duration_s,
+            num_requests=num_requests,
+            batch_size=int(args.batch_size),
+            context_len=int(args.context_len),
+            target_len=int(args.target_len),
+            seed=int(args.seed),
+        )
     if not requests:
         print("generated no requests; adjust --duration-s / --num-requests / --arrival-rate", file=sys.stderr)
         return 2
