@@ -28,7 +28,10 @@ def _percentile(values: List[float], q: float) -> Optional[float]:
 class RequestMetrics:
     req_id: str
     arrival_ts: float
+    running_enter_ts: Optional[float] = None
+    """worker0-head running-queue admission time (TTFT/e2e baseline)."""
     service_start_ts: Optional[float] = None
+    """First compute start at worker0 stage (optional diagnostics)."""
     first_token_ts: Optional[float] = None
     finish_ts: Optional[float] = None
     batch_size: int = 1
@@ -37,24 +40,25 @@ class RequestMetrics:
     generated_tokens: int = 0
 
     def ttft_s(self) -> Optional[float]:
-        if self.first_token_ts is None:
+        if self.first_token_ts is None or self.running_enter_ts is None:
             return None
-        return self.first_token_ts - self.arrival_ts
+        return self.first_token_ts - self.running_enter_ts
 
     def e2e_latency_s(self) -> Optional[float]:
-        if self.finish_ts is None:
+        if self.finish_ts is None or self.running_enter_ts is None:
             return None
-        return self.finish_ts - self.arrival_ts
+        return self.finish_ts - self.running_enter_ts
 
     def queue_wait_s(self) -> Optional[float]:
-        if self.service_start_ts is None:
+        if self.running_enter_ts is None:
             return None
-        return self.service_start_ts - self.arrival_ts
+        return self.running_enter_ts - self.arrival_ts
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "req_id": self.req_id,
             "arrival_ts": self.arrival_ts,
+            "running_enter_ts": self.running_enter_ts,
             "service_start_ts": self.service_start_ts,
             "first_token_ts": self.first_token_ts,
             "finish_ts": self.finish_ts,
@@ -78,11 +82,20 @@ class SimulationSummary:
     throughput_req_s: float
     throughput_token_s: float
     avg_ttft_s: Optional[float]
+    p50_ttft_s: Optional[float]
+    p90_ttft_s: Optional[float]
     p95_ttft_s: Optional[float]
+    p99_ttft_s: Optional[float]
     avg_e2e_s: Optional[float]
+    p50_e2e_s: Optional[float]
+    p90_e2e_s: Optional[float]
     p95_e2e_s: Optional[float]
+    p99_e2e_s: Optional[float]
     avg_queue_wait_s: Optional[float]
+    p50_queue_wait_s: Optional[float]
+    p90_queue_wait_s: Optional[float]
     p95_queue_wait_s: Optional[float]
+    p99_queue_wait_s: Optional[float]
 
 
 @dataclass
@@ -128,6 +141,14 @@ class MetricsCollector:
         item.context_len = context_len
         item.target_len = target_len
         item.generated_tokens = int(batch_size) * max(0, int(target_len) - int(context_len))
+
+    def mark_running_enter(self, req_id: str, running_enter_ts: float) -> None:
+        item = self._requests.get(req_id)
+        if item is None:
+            item = RequestMetrics(req_id=req_id, arrival_ts=running_enter_ts)
+            self._requests[req_id] = item
+        if item.running_enter_ts is None:
+            item.running_enter_ts = running_enter_ts
 
     def mark_service_start(self, req_id: str, service_start_ts: float) -> None:
         item = self.ensure_request(req_id, arrival_ts=service_start_ts)
@@ -176,11 +197,20 @@ class MetricsCollector:
             throughput_req_s=(len(completed) / elapsed if elapsed > 0 else 0.0),
             throughput_token_s=(total_tokens / elapsed if elapsed > 0 else 0.0),
             avg_ttft_s=(sum(ttfts) / len(ttfts) if ttfts else None),
+            p50_ttft_s=_percentile(ttfts, 0.50),
+            p90_ttft_s=_percentile(ttfts, 0.90),
             p95_ttft_s=_percentile(ttfts, 0.95),
+            p99_ttft_s=_percentile(ttfts, 0.99),
             avg_e2e_s=(sum(e2es) / len(e2es) if e2es else None),
+            p50_e2e_s=_percentile(e2es, 0.50),
+            p90_e2e_s=_percentile(e2es, 0.90),
             p95_e2e_s=_percentile(e2es, 0.95),
+            p99_e2e_s=_percentile(e2es, 0.99),
             avg_queue_wait_s=(sum(waits) / len(waits) if waits else None),
+            p50_queue_wait_s=_percentile(waits, 0.50),
+            p90_queue_wait_s=_percentile(waits, 0.90),
             p95_queue_wait_s=_percentile(waits, 0.95),
+            p99_queue_wait_s=_percentile(waits, 0.99),
         )
         return SimulationReport(
             config=config,

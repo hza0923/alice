@@ -32,6 +32,7 @@ class DESConfig:
     packing_window_ms: float
     default_link_bandwidth_gbps: float
     link_bandwidth_overrides: Dict[str, float]
+    max_in_flight_requests: int = 512
     max_events: int = 2_000_000
 
 
@@ -57,6 +58,8 @@ class PipelineDESSimulator:
             raise ValueError("strategy has no pipeline_stages")
         if config.default_link_bandwidth_gbps <= 0:
             raise ValueError("default_link_bandwidth_gbps must be > 0")
+        if int(config.max_in_flight_requests) <= 0:
+            raise ValueError("max_in_flight_requests must be > 0")
 
         self.strategy_doc = strategy_doc
         self.config = config
@@ -79,6 +82,7 @@ class PipelineDESSimulator:
         self._active_batches: Dict[str, _BatchContext] = {}
         self._now = 0.0
         self._sim_start_ts = 0.0
+        self._running_req_count = 0
         self._worker0_stage = self.stages[0]
         designated = str((strategy_doc.get("schedule_input") or {}).get("designated_device") or "")
         first_worker = str(self._worker0_stage.get("worker_name"))
@@ -237,11 +241,6 @@ class PipelineDESSimulator:
                 branch=branch,
             )
 
-        if phase == "prefill" and stage_idx == 0:
-            for req in batch.packed.requests:
-                self.metrics.mark_service_start(req.req_id, start_ts)
-                self._log_req_event(req.req_id, start_ts, "service_start")
-
         self._push_event(
             end_ts,
             event_kind,
@@ -333,7 +332,12 @@ class PipelineDESSimulator:
             if self._worker0_head_tail and stage_has_worker0_head_tail(self._worker0_stage)
             else first_worker
         )
-        while now_ts >= self._stage_available[first_head_key] and self.scheduler.has_pending():
+        max_run = int(self.config.max_in_flight_requests)
+        while (
+            now_ts >= self._stage_available[first_head_key]
+            and self.scheduler.has_pending()
+            and self._running_req_count < max_run
+        ):
             packed = self.scheduler.pop_next_batch(now_ts)
             if packed is None:
                 break
@@ -344,6 +348,10 @@ class PipelineDESSimulator:
                 decode_steps_after_prefill=max(0, max(r.new_tokens for r in packed.requests) - 1),
             )
             self._active_batches[batch.batch_id] = batch
+            for req in packed.requests:
+                self.metrics.mark_running_enter(req.req_id, now_ts)
+                self._log_req_event(req.req_id, now_ts, "running_enter")
+            self._running_req_count += len(packed.requests)
             self._schedule_stage_compute(
                 batch=batch,
                 stage_idx=0,
@@ -359,6 +367,7 @@ class PipelineDESSimulator:
         for req in batch.packed.requests:
             self.metrics.mark_finished(req.req_id, ts)
             self._log_req_event(req.req_id, ts, "request_finished")
+        self._running_req_count = max(0, self._running_req_count - len(batch.packed.requests))
         self._active_batches.pop(batch.batch_id, None)
 
     def run(self, requests: List[SimRequest]) -> SimulationReport:
@@ -511,6 +520,7 @@ class PipelineDESSimulator:
             "schedule_input": dict(self.strategy_doc.get("schedule_input") or {}),
             "max_batch_size": self.config.max_batch_size,
             "packing_window_ms": self.config.packing_window_ms,
+            "max_in_flight_requests": int(self.config.max_in_flight_requests),
             "default_link_bandwidth_gbps": self.config.default_link_bandwidth_gbps,
             "link_bandwidth_overrides_gbps": dict(self.config.link_bandwidth_overrides),
             "stage_order": list(self.stage_order),

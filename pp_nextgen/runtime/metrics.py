@@ -30,6 +30,8 @@ class RequestTrace:
     worker_name: str
     created_monotonic: float
     hops: List[HopRecord] = field(default_factory=list)
+    waiting_enter_monotonic: Optional[float] = None
+    running_enter_monotonic: Optional[float] = None
     ingress_monotonic: Optional[float] = None
     first_token_monotonic: Optional[float] = None
     finished_monotonic: Optional[float] = None
@@ -77,6 +79,34 @@ class RequestJournal:
         tr = self.ensure_req(req_id)
         tr.hops.append(hop)
 
+    def mark_waiting(self, req_id: str) -> None:
+        """Worker0 head: frame entered waiting queue before admission to running."""
+        tr = self.ensure_req(req_id)
+        if tr.waiting_enter_monotonic is None:
+            tr.waiting_enter_monotonic = time.monotonic()
+
+    def mark_running_enter(
+        self,
+        req_id: str,
+        *,
+        batch_size: Optional[int] = None,
+        context_len: Optional[int] = None,
+        target_len: Optional[int] = None,
+    ) -> None:
+        """Worker0 head: admitted to running set; starts TTFT / e2e measurement window."""
+        tr = self.ensure_req(req_id)
+        now = time.monotonic()
+        if tr.running_enter_monotonic is None:
+            tr.running_enter_monotonic = now
+        if tr.ingress_monotonic is None:
+            tr.ingress_monotonic = now
+        if batch_size is not None:
+            tr.batch_size = int(batch_size)
+        if context_len is not None:
+            tr.context_len = int(context_len)
+        if target_len is not None:
+            tr.target_len = int(target_len)
+
     def mark_ingress(
         self,
         req_id: str,
@@ -85,6 +115,7 @@ class RequestJournal:
         context_len: Optional[int] = None,
         target_len: Optional[int] = None,
     ) -> None:
+        """Non-head workers: first frame arrival (latency anchor on this worker)."""
         tr = self.ensure_req(req_id)
         if tr.ingress_monotonic is None:
             tr.ingress_monotonic = time.monotonic()
@@ -160,10 +191,13 @@ class RequestJournal:
         }
         out["transfer_summary"] = self.composed_transfer_summary(transfer_summary)
         for rid, tr in self._traces.items():
+            lat0 = tr.running_enter_monotonic if tr.running_enter_monotonic is not None else tr.ingress_monotonic
             out["requests"][rid] = {
                 "req_id": tr.req_id,
                 "worker_name": tr.worker_name,
                 "created_monotonic": tr.created_monotonic,
+                "waiting_enter_monotonic": tr.waiting_enter_monotonic,
+                "running_enter_monotonic": tr.running_enter_monotonic,
                 "ingress_monotonic": tr.ingress_monotonic,
                 "first_token_monotonic": tr.first_token_monotonic,
                 "finished_monotonic": tr.finished_monotonic,
@@ -171,8 +205,9 @@ class RequestJournal:
                 "context_len": tr.context_len,
                 "target_len": tr.target_len,
                 "generated_tokens": tr.generated_tokens,
-                "ttft_ms": _delta_ms(tr.ingress_monotonic, tr.first_token_monotonic),
-                "e2e_ms": _delta_ms(tr.ingress_monotonic, tr.finished_monotonic),
+                "queue_wait_ms": _delta_ms(tr.waiting_enter_monotonic, tr.running_enter_monotonic),
+                "ttft_ms": _delta_ms(lat0, tr.first_token_monotonic),
+                "e2e_ms": _delta_ms(lat0, tr.finished_monotonic),
                 "hops": [asdict(h) for h in tr.hops],
             }
         return out
@@ -185,32 +220,42 @@ class RequestJournal:
                 "throughput_req_s": 0.0,
                 "throughput_token_s": 0.0,
                 "avg_ttft_s": None,
+                "p50_ttft_s": None,
+                "p90_ttft_s": None,
                 "p95_ttft_s": None,
+                "p99_ttft_s": None,
                 "avg_e2e_s": None,
+                "p50_e2e_s": None,
+                "p90_e2e_s": None,
                 "p95_e2e_s": None,
+                "p99_e2e_s": None,
             }
-        ingress_ts = [x.ingress_monotonic for x in reqs if x.ingress_monotonic is not None]
+
+        def _latency_anchor(tr: RequestTrace) -> Optional[float]:
+            return tr.running_enter_monotonic if tr.running_enter_monotonic is not None else tr.ingress_monotonic
+
+        ingress_ts = [_latency_anchor(x) for x in reqs if _latency_anchor(x) is not None]
         finish_ts = [x.finished_monotonic for x in reqs if x.finished_monotonic is not None]
         request_count = len(reqs)
         elapsed_s = None
         if ingress_ts and finish_ts:
             elapsed_s = max(0.0, max(finish_ts) - min(ingress_ts))
         ttfts = [
-            _delta_s(x.ingress_monotonic, x.first_token_monotonic)
+            _delta_s(_latency_anchor(x), x.first_token_monotonic)
             for x in reqs
-            if x.ingress_monotonic is not None and x.first_token_monotonic is not None
+            if _latency_anchor(x) is not None and x.first_token_monotonic is not None
         ]
         e2es = [
-            _delta_s(x.ingress_monotonic, x.finished_monotonic)
+            _delta_s(_latency_anchor(x), x.finished_monotonic)
             for x in reqs
-            if x.ingress_monotonic is not None and x.finished_monotonic is not None
+            if _latency_anchor(x) is not None and x.finished_monotonic is not None
         ]
         ttfts = [x for x in ttfts if x is not None]
         e2es = [x for x in e2es if x is not None]
         total_tokens = sum(
             x.generated_tokens
             for x in reqs
-            if x.ingress_monotonic is not None and x.finished_monotonic is not None
+            if _latency_anchor(x) is not None and x.finished_monotonic is not None
         )
         throughput_req_s = 0.0
         throughput_token_s = 0.0
@@ -222,9 +267,15 @@ class RequestJournal:
             "throughput_req_s": throughput_req_s,
             "throughput_token_s": throughput_token_s,
             "avg_ttft_s": (sum(ttfts) / len(ttfts)) if ttfts else None,
+            "p50_ttft_s": _percentile(ttfts, 0.50),
+            "p90_ttft_s": _percentile(ttfts, 0.90),
             "p95_ttft_s": _percentile(ttfts, 0.95),
+            "p99_ttft_s": _percentile(ttfts, 0.99),
             "avg_e2e_s": (sum(e2es) / len(e2es)) if e2es else None,
+            "p50_e2e_s": _percentile(e2es, 0.50),
+            "p90_e2e_s": _percentile(e2es, 0.90),
             "p95_e2e_s": _percentile(e2es, 0.95),
+            "p99_e2e_s": _percentile(e2es, 0.99),
         }
 
     def export_json(self, path: str | Path, *, transfer_summary: Optional[Dict[str, Any]] = None) -> None:
@@ -247,7 +298,10 @@ class RequestJournal:
 
 
 class MasterLatencyTracker:
-    """Master-side e2e latency from SubmitTask to ReportRequestFinished."""
+    """Master-side latency from SubmitTask RPC to ReportRequestFinished (wall clock time).
+
+    Worker0 RequestJournal TTFT/E2E use running-queue admission on the head node, not SubmitTask time.
+    """
 
     def __init__(self) -> None:
         self._start: Dict[str, float] = {}

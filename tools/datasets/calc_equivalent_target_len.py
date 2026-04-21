@@ -118,7 +118,8 @@ def _parse_args() -> argparse.Namespace:
         "-o",
         "--output",
         required=True,
-        help="Write full results (JSON) to this path",
+        help="Write full results (JSON) to this path; if this path is an existing directory, "
+        "writes equivalent_target_len.json inside it",
     )
     parser.add_argument(
         "--show-top",
@@ -139,6 +140,9 @@ def main() -> int:
     eq_target_len, freq, valid_rows, total_events = _compute_equivalent_target_len(rows)
 
     out_path = Path(args.output).resolve()
+    # If user passes an existing directory (common mistake), write a default file inside it.
+    if out_path.is_dir():
+        out_path = out_path / "equivalent_target_len.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     doc = _build_result_doc(
         stats_file=stats_file,

@@ -63,6 +63,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--context-len", type=int, default=128, help="Per-request context length (synthetic)")
     p.add_argument("--target-len", type=int, default=256, help="Per-request target length (synthetic)")
     p.add_argument("--max-batch-size", type=int, default=32, help="Single-request batch upper bound")
+    p.add_argument(
+        "--max-in-flight",
+        type=int,
+        default=512,
+        help="worker0-head running queue capacity (matches runtime scheduling.max_in_flight_requests)",
+    )
     p.add_argument("--default-link-bandwidth-gbps", type=float, default=0.1, help="Fallback link bandwidth")
     p.add_argument(
         "--link-bandwidth",
@@ -153,6 +159,7 @@ def main() -> int:
             max_batch_size=int(args.max_batch_size),
             default_link_bandwidth_gbps=float(args.default_link_bandwidth_gbps),
             link_bandwidth_overrides=link_overrides,
+            max_in_flight_requests=int(args.max_in_flight),
         ),
     )
     report = sim.run(requests)
@@ -183,7 +190,7 @@ def main() -> int:
             if req.finish_ts is None:
                 continue
             sidecar["requests"][req.req_id] = {
-                "start": req.arrival_ts,
+                "start": req.running_enter_ts if req.running_enter_ts is not None else req.arrival_ts,
                 "end": req.finish_ts,
                 "latency_s": req.e2e_latency_s(),
             }

@@ -1,25 +1,16 @@
 {
   "schema_version": "worker_strategy.v1",
-  "generated_at": "2026-04-21T03:08:38Z",
-  "worker_name": "3060_0",
+  "generated_at": "2026-04-21T06:21:37Z",
+  "worker_name": "tx2_0",
   "global_strategy_ref": "pipeline_strategy.json",
   "execution_plan": {
     "head_ordered_modules": [
-      "input_embed",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer",
-      "decoder_layer"
+      "qkv_projection",
+      "attn_qk",
+      "attn_av",
+      "o_projection"
     ],
-    "tail_ordered_modules": [
-      "lm_head"
-    ],
+    "tail_ordered_modules": [],
     "phase_rules": {
       "prefill": {
         "enabled": true

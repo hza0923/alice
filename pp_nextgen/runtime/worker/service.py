@@ -132,9 +132,13 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
         self._journal = RequestJournal(worker_name)
         maxsz = rt.task_queue_maxsize
+        self._max_running = max(1, int(rt.max_in_flight_requests))
         if self._is_first_worker:
             self._head_queue: asyncio.Queue[pv2.Frame] = asyncio.Queue(maxsize=maxsz)
             self._tail_queue: asyncio.Queue[pv2.Frame] = asyncio.Queue(maxsize=maxsz)
+            self._waiting_queue: asyncio.Queue[pv2.Frame] = asyncio.Queue(maxsize=maxsz)
+            self._running_req_ids: Set[str] = set()
+            self._admission_cv = asyncio.Condition()
         else:
             self._task_queue: asyncio.Queue[pv2.Frame] = asyncio.Queue(maxsize=maxsz)
 
@@ -192,6 +196,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         await self._initialize_executor()
         self._prewarm_model_layers()
         if self._is_first_worker:
+            asyncio.create_task(self._worker0_admission_loop())
             asyncio.create_task(self._task_processor_worker0())
         else:
             asyncio.create_task(self._task_processor())
@@ -221,6 +226,18 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
     async def SendFrame(self, request: pv2.Frame, context: grpc.aio.ServicerContext) -> pv2.Ack:
         if self._is_first_worker:
+            initial_ingress = (
+                not request.pipeline_stop
+                and not request.ring_return
+                and int(request.step_id) == 0
+            )
+            if initial_ingress:
+                self._journal.mark_waiting(request.req_id)
+                await self._waiting_queue.put(request)
+                async with self._admission_cv:
+                    self._admission_cv.notify_all()
+                return pv2.Ack(ok=True, message="")
+
             # Without tail modules, all ingress (master + ring return) uses one head queue + head decode.
             if not self._model.has_tail:
                 await self._head_queue.put(request)
@@ -231,6 +248,33 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         else:
             await self._task_queue.put(request)
         return pv2.Ack(ok=True, message="")
+
+    async def _worker0_admission_loop(self) -> None:
+        """Promote frames from waiting -> running (bounded by max_in_flight_requests), then feed head_queue."""
+        assert self._is_first_worker
+        while not self._done.is_set():
+            frame = await self._waiting_queue.get()
+            try:
+                async with self._admission_cv:
+                    while len(self._running_req_ids) >= self._max_running and not self._done.is_set():
+                        await self._admission_cv.wait()
+                    if self._done.is_set():
+                        break
+                    self._running_req_ids.add(frame.req_id)
+                    self._journal.mark_running_enter(
+                        frame.req_id,
+                        batch_size=int(frame.batch_size or 1),
+                        context_len=int(frame.context_len),
+                        target_len=int(frame.target_len),
+                    )
+                await self._head_queue.put(frame)
+            finally:
+                self._waiting_queue.task_done()
+
+    async def _release_running_slot(self, req_id: str) -> None:
+        self._running_req_ids.discard(req_id)
+        async with self._admission_cv:
+            self._admission_cv.notify_all()
 
     async def NotifyPipelineEnd(
         self, request: pv2.PipelineEndNotification, context: grpc.aio.ServicerContext
@@ -324,6 +368,9 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             return
         # Do not flush until every request has reported finished (tail may not have run yet).
         if self._open_requests:
+            return
+        wq = getattr(self, "_waiting_queue", None)
+        if wq is not None and not wq.empty():
             return
         if not self._head_queue.empty():
             return
@@ -428,12 +475,6 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
 
         if not frame.ring_return and int(frame.step_id) == 0:
             self._open_requests.add(frame.req_id)
-            self._journal.mark_ingress(
-                frame.req_id,
-                batch_size=int(frame.batch_size or 1),
-                context_len=int(frame.context_len),
-                target_len=int(frame.target_len),
-            )
 
         self._model.ensure_kv_session(
             frame.req_id,
@@ -490,6 +531,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                 self._journal.mark_finished(frame.req_id)
                 self._active_reqs.discard(frame.req_id)
                 self._open_requests.discard(frame.req_id)
+                await self._release_running_slot(frame.req_id)
                 self._model.close_kv_session(frame.req_id)
                 return
             await self._send_queue.put((out, hop))
@@ -564,6 +606,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
             self._journal.mark_finished(frame.req_id)
             self._active_reqs.discard(frame.req_id)
             self._open_requests.discard(frame.req_id)
+            await self._release_running_slot(frame.req_id)
             self._model.close_kv_session(frame.req_id)
             return
         # After tail compute on the prefill lap, switch ring to decode for subsequent head hops.

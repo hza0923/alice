@@ -6,7 +6,7 @@ import json
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
 from pp_nextgen.runtime.strategy import (
     expected_comm_bytes,
@@ -23,6 +23,7 @@ class QueueSimConfig:
     max_batch_size: int
     default_link_bandwidth_gbps: float
     link_bandwidth_overrides: Dict[str, float]
+    max_in_flight_requests: int = 512
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,8 @@ class Worker0QueueSimulator:
             raise ValueError("strategy has no pipeline_stages")
         if config.max_batch_size <= 0:
             raise ValueError("max_batch_size must be > 0")
+        if int(config.max_in_flight_requests) <= 0:
+            raise ValueError("max_in_flight_requests must be > 0")
         if config.default_link_bandwidth_gbps <= 0:
             raise ValueError("default_link_bandwidth_gbps must be > 0")
 
@@ -197,7 +200,6 @@ class Worker0QueueSimulator:
 
             if item.phase == "prefill" and idx == 0:
                 self.metrics.mark_service_start(req.req_id, start_ts)
-                self._log_req_event(req.req_id, start_ts, "service_start")
 
             is_last = idx == (len(self.stages) - 1)
             if is_last:
@@ -248,6 +250,9 @@ class Worker0QueueSimulator:
 
         pending_prefill: Deque[_WorkItem] = deque()
         pending_decode: Deque[_WorkItem] = deque()
+        waiting_prefill: Deque[SimRequest] = deque()
+        running_req_ids: Set[str] = set()
+        max_in_flight = int(self.config.max_in_flight_requests)
 
         arrival_idx = 0
         n = len(reqs)
@@ -274,13 +279,22 @@ class Worker0QueueSimulator:
         def load_arrivals(until_ts: float) -> None:
             nonlocal arrival_idx
             while arrival_idx < n and reqs[arrival_idx].arrival_ts <= until_ts:
-                req = reqs[arrival_idx]
-                pending_prefill.append(_WorkItem(req=req, phase="prefill", decode_step=0, ready_ts=req.arrival_ts))
+                waiting_prefill.append(reqs[arrival_idx])
                 arrival_idx += 1
+
+        def admit(wall_ts: float) -> None:
+            while len(running_req_ids) < max_in_flight and waiting_prefill:
+                req = waiting_prefill.popleft()
+                admission_ts = max(float(req.arrival_ts), wall_ts)
+                self.metrics.mark_running_enter(req.req_id, admission_ts)
+                running_req_ids.add(req.req_id)
+                self._log_req_event(req.req_id, admission_ts, "running_enter")
+                pending_prefill.append(_WorkItem(req=req, phase="prefill", decode_step=0, ready_ts=admission_ts))
 
         while completed < n:
             worker0_available = self._stage_available[worker0]
             load_arrivals(worker0_available)
+            admit(worker0_available)
 
             ready_prefill = bool(pending_prefill and pending_prefill[0].ready_ts <= worker0_available)
             ready_decode = bool(pending_decode and pending_decode[0].ready_ts <= worker0_available)
@@ -298,6 +312,7 @@ class Worker0QueueSimulator:
                     raise RuntimeError("no remaining work but simulation is not complete")
                 target_ts = min(cands)
                 load_arrivals(target_ts)
+                admit(target_ts)
                 if pending_prefill and pending_prefill[0].ready_ts <= target_ts:
                     item = pending_prefill.popleft()
                 elif pending_decode and pending_decode[0].ready_ts <= target_ts:
@@ -324,6 +339,7 @@ class Worker0QueueSimulator:
                 else:
                     self.metrics.mark_finished(req_id, done_ts)
                     self._log_req_event(req_id, done_ts, "request_finished")
+                    running_req_ids.discard(req_id)
                     completed += 1
             else:
                 next_step = self._next_decode_step[req_id] + 1
@@ -340,11 +356,13 @@ class Worker0QueueSimulator:
                 else:
                     self.metrics.mark_finished(req_id, done_ts)
                     self._log_req_event(req_id, done_ts, "request_finished")
+                    running_req_ids.discard(req_id)
                     completed += 1
 
         cfg: Dict[str, Any] = {
             "schedule_input": dict(self.strategy_doc.get("schedule_input") or {}),
             "max_batch_size": self.config.max_batch_size,
+            "max_in_flight_requests": max_in_flight,
             "default_link_bandwidth_gbps": self.config.default_link_bandwidth_gbps,
             "link_bandwidth_overrides_gbps": dict(self.config.link_bandwidth_overrides),
             "stage_order": list(self.stage_order),

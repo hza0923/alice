@@ -13,7 +13,7 @@ runtime:
     send_queue_maxsize: 2048
   scheduling:
     strict_ordering: false
-    max_in_flight_requests: 512
+    max_in_flight_requests: 16
   execution:
     mode: sleep_executor
     # sleep_executor only: add ms to profiled compute before sleeping (negative = shorten sleep).
