@@ -1,14 +1,12 @@
 """Split-module micro-benchmarks that emit legacy ``*_all_results.json`` for ``tools/build_registry.py``."""
 
-from __future__ import annotations
-
 import argparse
 import gc
 import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -1044,10 +1042,10 @@ def component_test_registry() -> Dict[str, Any]:
 
 def run_all_benchmarks(
     *,
-    model_configs: List[Tuple[Any, ...]] | None = None,
-    test_configs: List[Tuple[int, int, int, int]] | None = None,
-    selected_components: Sequence[str] | None = None,
-    output_dir: Path | None = None,
+    model_configs: Optional[List[Tuple[Any, ...]]] = None,
+    test_configs: Optional[List[Tuple[int, int, int, int]]] = None,
+    selected_components: Optional[Sequence[str]] = None,
+    output_dir: Optional[Path] = None,
 ) -> List[Path]:
     """Run configured sweeps and write one legacy JSON per model. Returns written paths."""
     model_cfgs = model_configs or list(DEFAULT_MODEL_CONFIGS)

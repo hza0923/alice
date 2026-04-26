@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Run split-module benchmarks and emit legacy ``*_all_results.json`` (see ``profiling/README.md``)."""
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 
