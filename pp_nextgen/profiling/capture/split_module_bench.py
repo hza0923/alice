@@ -62,6 +62,20 @@ class ModelConfig:
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
 
+class RMSNorm(nn.Module):
+    """Llama-style RMSNorm (shared by layernorm microbench and pre-norm blocks)."""
+
+    def __init__(self, hidden_size: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size, device=device))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states
+
+
 # ==================== 辅助函数 ====================
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     if n_rep == 1:
@@ -240,16 +254,6 @@ def test_layernorm(config, batch_size, p_max_len, d_max_len, step):
     """测试 LayerNorm - 从1到p_max_len逐步测试"""
     print("\n>>> 测试组件: RMSNorm")
     
-    class RMSNorm(nn.Module):
-        def __init__(self, hidden_size, eps=1e-6):
-            super().__init__()
-            self.weight = nn.Parameter(torch.ones(hidden_size, device=device))
-            self.variance_epsilon = eps
-        def forward(self, hidden_states):
-            variance = hidden_states.pow(2).mean(-1, keepdim=True)
-            hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-            return self.weight * hidden_states
-    
     norm = RMSNorm(config.hidden_size, config.rms_norm_eps).to(device).to(config.dtype)
     norm.eval()
     
@@ -326,8 +330,8 @@ def test_layernorm(config, batch_size, p_max_len, d_max_len, step):
 
 
 def test_qkv_rope(config, batch_size, p_max_len, d_max_len, step):
-    """测试 QKV投影 + RoPE - 从1到p_max_len逐步测试"""
-    print("\n>>> 测试组件: QKV + RoPE")
+    """测试 Pre-norm + fused QKV + RoPE（与 Llama 子层中 QKV 前接 input_layernorm 一致；残差在完整 attention 之后）。"""
+    print("\n>>> 测试组件: QKV + RoPE (pre-norm RMSNorm + fused QKV)")
     
     class RotaryEmbedding(nn.Module):
         def __init__(self, dim, max_position_embeddings=2048, base=10000.0):
@@ -340,14 +344,19 @@ def test_qkv_rope(config, batch_size, p_max_len, d_max_len, step):
             freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             return emb.cos().to(x.dtype), emb.sin().to(x.dtype)
-    
-    q_proj = nn.Linear(config.hidden_size, config.num_heads * config.head_dim, bias=False, device=device).to(config.dtype)
-    k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * config.head_dim, bias=False, device=device).to(config.dtype)
-    v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * config.head_dim, bias=False, device=device).to(config.dtype)
+
+    q_out = config.num_heads * config.head_dim
+    k_out = config.num_key_value_heads * config.head_dim
+    v_out = config.num_key_value_heads * config.head_dim
+    fused_out = q_out + k_out + v_out
+    input_norm = RMSNorm(config.hidden_size, config.rms_norm_eps).to(device).to(config.dtype)
+    qkv_proj = nn.Linear(config.hidden_size, fused_out, bias=False, device=device).to(config.dtype)
     rotary = RotaryEmbedding(config.head_dim, config.max_position_embeddings, config.rope_theta).to(device)
     
-    # 计算权重占用
-    weight_bytes = (q_proj.weight.numel() + k_proj.weight.numel() + v_proj.weight.numel()) * q_proj.weight.element_size()
+    weight_bytes = (
+        qkv_proj.weight.numel() * qkv_proj.weight.element_size()
+        + input_norm.weight.numel() * input_norm.weight.element_size()
+    )
     weight_gb = calculate_model_size(weight_bytes)
     
     results = {
@@ -369,10 +378,12 @@ def test_qkv_rope(config, batch_size, p_max_len, d_max_len, step):
                     pos_ids = torch.arange(0, seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
                     
                     def forward_fn():
-                        cos, sin = rotary(x, pos_ids)
-                        q = q_proj(x).view(batch_size, seq_len, config.num_heads, config.head_dim).transpose(1, 2)
-                        k = k_proj(x).view(batch_size, seq_len, config.num_key_value_heads, config.head_dim).transpose(1, 2)
-                        v = v_proj(x).view(batch_size, seq_len, config.num_key_value_heads, config.head_dim).transpose(1, 2)
+                        h = input_norm(x)
+                        cos, sin = rotary(h, pos_ids)
+                        q_part, k_part, v_part = qkv_proj(h).split((q_out, k_out, v_out), dim=-1)
+                        q = q_part.view(batch_size, seq_len, config.num_heads, config.head_dim).transpose(1, 2)
+                        k = k_part.view(batch_size, seq_len, config.num_key_value_heads, config.head_dim).transpose(1, 2)
+                        v = v_part.view(batch_size, seq_len, config.num_key_value_heads, config.head_dim).transpose(1, 2)
                         return apply_rotary_pos_emb(q, k, cos, sin)
                     
                     time_ms = measure_time(forward_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
@@ -396,10 +407,12 @@ def test_qkv_rope(config, batch_size, p_max_len, d_max_len, step):
                     pos_ids = torch.full((batch_size, 1), seq_len - 1, device=device)
                     
                     def decode_fn():
-                        cos, sin = rotary(x, pos_ids)
-                        q = q_proj(x).view(batch_size, 1, config.num_heads, config.head_dim).transpose(1, 2)
-                        k = k_proj(x).view(batch_size, 1, config.num_key_value_heads, config.head_dim).transpose(1, 2)
-                        v = v_proj(x).view(batch_size, 1, config.num_key_value_heads, config.head_dim).transpose(1, 2)
+                        h = input_norm(x)
+                        cos, sin = rotary(h, pos_ids)
+                        q_part, k_part, v_part = qkv_proj(h).split((q_out, k_out, v_out), dim=-1)
+                        q = q_part.view(batch_size, 1, config.num_heads, config.head_dim).transpose(1, 2)
+                        k = k_part.view(batch_size, 1, config.num_key_value_heads, config.head_dim).transpose(1, 2)
+                        v = v_part.view(batch_size, 1, config.num_key_value_heads, config.head_dim).transpose(1, 2)
                         return apply_rotary_pos_emb(q, k, cos, sin)
                     
                     time_ms = measure_time(decode_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
@@ -422,7 +435,7 @@ def test_qkv_rope(config, batch_size, p_max_len, d_max_len, step):
         }
     
     finally:
-        del q_proj, k_proj, v_proj, rotary
+        del input_norm, qkv_proj, rotary
         _empty_cache_if_cuda()
     
     return results
@@ -648,8 +661,8 @@ def test_attn_av(config, batch_size, p_max_len, d_max_len, step):
 
 
 def test_attn_wo(config, batch_size, p_max_len, d_max_len, step):
-    """测试 Attention输出投影 W_o"""
-    print("\n>>> 测试组件: Attention Output Projection")
+    """测试 Attention 输出投影 W_o + 残差（hidden + o_proj(attn_out)）。"""
+    print("\n>>> 测试组件: Attention Output Projection + residual")
     
     o_proj = nn.Linear(config.num_heads * config.head_dim, config.hidden_size, bias=False, device=device).to(config.dtype)
     o_proj.eval()
@@ -673,9 +686,16 @@ def test_attn_wo(config, batch_size, p_max_len, d_max_len, step):
             # Prefill
             for seq_len in range(1, p_max_len + 1, step):
                 try:
-                    x = torch.randn(batch_size, seq_len, config.num_heads * config.head_dim, device=device, dtype=config.dtype)
+                    residual = torch.randn(batch_size, seq_len, config.hidden_size, device=device, dtype=config.dtype)
+                    attn_merged = torch.randn(
+                        batch_size,
+                        seq_len,
+                        config.num_heads * config.head_dim,
+                        device=device,
+                        dtype=config.dtype,
+                    )
                     time_ms = measure_time(
-                        lambda: o_proj(x),
+                        lambda: residual + o_proj(attn_merged),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
@@ -689,9 +709,16 @@ def test_attn_wo(config, batch_size, p_max_len, d_max_len, step):
             decode_times = []
             for seq_len in range(1, d_max_len + 1, step):
                 try:
-                    x = torch.randn(batch_size, 1, config.num_heads * config.head_dim, device=device, dtype=config.dtype)
+                    residual = torch.randn(batch_size, 1, config.hidden_size, device=device, dtype=config.dtype)
+                    attn_merged = torch.randn(
+                        batch_size,
+                        1,
+                        config.num_heads * config.head_dim,
+                        device=device,
+                        dtype=config.dtype,
+                    )
                     time_ms = measure_time(
-                        lambda: o_proj(x),
+                        lambda: residual + o_proj(attn_merged),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
@@ -721,16 +748,23 @@ def test_attn_wo(config, batch_size, p_max_len, d_max_len, step):
 
 
 def test_up_proj(config, batch_size, p_max_len, d_max_len, step):
-    """测试 MLP 上投影"""
-    print("\n>>> 测试组件: MLP 上投影")
+    """测试 Pre-norm + MLP gate+up（fused gate_up(RMSNorm(x))，与 Llama post_attention_layernorm 后接 SwiGLU 前半段一致）。"""
+    print("\n>>> 测试组件: MLP gate+up (pre-norm RMSNorm + fused)")
     
-    up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False, device=device).to(config.dtype)
-    gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False, device=device).to(config.dtype)
-    up_proj.eval()
-    gate_proj.eval()
+    input_norm = RMSNorm(config.hidden_size, config.rms_norm_eps).to(device).to(config.dtype)
+    gate_up = nn.Linear(
+        config.hidden_size, 2 * config.intermediate_size, bias=False, device=device
+    ).to(config.dtype)
+    gate_up.eval()
+
+    def fused_swiglu_branch(x):
+        gate, up = gate_up(input_norm(x)).chunk(2, dim=-1)
+        return torch.nn.functional.silu(gate) * up
     
-    # 计算权重占用
-    weight_bytes = (up_proj.weight.numel() + gate_proj.weight.numel()) * up_proj.weight.element_size()
+    weight_bytes = (
+        gate_up.weight.numel() * gate_up.weight.element_size()
+        + input_norm.weight.numel() * input_norm.weight.element_size()
+    )
     weight_gb = calculate_model_size(weight_bytes)
     
     results = {
@@ -750,7 +784,7 @@ def test_up_proj(config, batch_size, p_max_len, d_max_len, step):
                 try:
                     x = torch.randn(batch_size, seq_len, config.hidden_size, device=device, dtype=config.dtype)
                     time_ms = measure_time(
-                        lambda: torch.nn.functional.silu(gate_proj(x)) * up_proj(x),
+                        lambda: fused_swiglu_branch(x),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
@@ -767,7 +801,7 @@ def test_up_proj(config, batch_size, p_max_len, d_max_len, step):
                 try:
                     x = torch.randn(batch_size, 1, config.hidden_size, device=device, dtype=config.dtype)
                     time_ms = measure_time(
-                        lambda: torch.nn.functional.silu(gate_proj(x)) * up_proj(x),
+                        lambda: fused_swiglu_branch(x),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
@@ -790,15 +824,15 @@ def test_up_proj(config, batch_size, p_max_len, d_max_len, step):
         }
     
     finally:
-        del up_proj, gate_proj
+        del input_norm, gate_up
         _empty_cache_if_cuda()
     
     return results
 
 
 def test_down_proj(config, batch_size, p_max_len, d_max_len, step):
-    """测试 MLP 下投影"""
-    print("\n>>> 测试组件: MLP 下投影")
+    """测试 MLP 下投影 + 残差（hidden + down(intermediate_act)，对应子层末尾相加）。"""
+    print("\n>>> 测试组件: MLP 下投影 + residual")
     
     down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False, device=device).to(config.dtype)
     down_proj.eval()
@@ -822,9 +856,10 @@ def test_down_proj(config, batch_size, p_max_len, d_max_len, step):
             # Prefill
             for seq_len in range(1, p_max_len + 1, step):
                 try:
-                    x = torch.randn(batch_size, seq_len, config.intermediate_size, device=device, dtype=config.dtype)
+                    residual = torch.randn(batch_size, seq_len, config.hidden_size, device=device, dtype=config.dtype)
+                    hidden_act = torch.randn(batch_size, seq_len, config.intermediate_size, device=device, dtype=config.dtype)
                     time_ms = measure_time(
-                        lambda: down_proj(x),
+                        lambda: residual + down_proj(hidden_act),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
@@ -839,9 +874,10 @@ def test_down_proj(config, batch_size, p_max_len, d_max_len, step):
             decode_times = []
             for seq_len in range(1, d_max_len + 1, step):
                 try:
-                    x = torch.randn(batch_size, 1, config.intermediate_size, device=device, dtype=config.dtype)
+                    residual = torch.randn(batch_size, 1, config.hidden_size, device=device, dtype=config.dtype)
+                    hidden_act = torch.randn(batch_size, 1, config.intermediate_size, device=device, dtype=config.dtype)
                     time_ms = measure_time(
-                        lambda: down_proj(x),
+                        lambda: residual + down_proj(hidden_act),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
@@ -871,24 +907,30 @@ def test_down_proj(config, batch_size, p_max_len, d_max_len, step):
 
 
 def test_mlp(config, batch_size, p_max_len, d_max_len, step):
-    """测试 MLP (SwiGLU)"""
-    print("\n>>> 测试组件: MLP")
+    """测试 Pre-norm + SwiGLU MLP + 残差（x + down(silu(gate)*up(norm(x)))）。"""
+    print("\n>>> 测试组件: MLP (pre-norm RMSNorm + SwiGLU + residual)")
     
     class MLP(nn.Module):
         def __init__(self, config):
             super().__init__()
-            self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False, device=device)
-            self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False, device=device)
+            self.input_norm = RMSNorm(config.hidden_size, config.rms_norm_eps)
+            self.gate_up = nn.Linear(
+                config.hidden_size, 2 * config.intermediate_size, bias=False, device=device
+            )
             self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False, device=device)
+
         def forward(self, x):
-            return self.down_proj(torch.nn.functional.silu(self.gate_proj(x)) * self.up_proj(x))
+            gate, up = self.gate_up(self.input_norm(x)).chunk(2, dim=-1)
+            return x + self.down_proj(torch.nn.functional.silu(gate) * up)
     
-    mlp = MLP(config).to(config.dtype)
+    mlp = MLP(config).to(device).to(config.dtype)
     mlp.eval()
     
-    # 计算权重占用
-    weight_bytes = (mlp.gate_proj.weight.numel() + mlp.up_proj.weight.numel() + 
-                   mlp.down_proj.weight.numel()) * mlp.gate_proj.weight.element_size()
+    weight_bytes = (
+        mlp.gate_up.weight.numel()
+        + mlp.down_proj.weight.numel()
+        + mlp.input_norm.weight.numel()
+    ) * mlp.gate_up.weight.element_size()
     weight_gb = calculate_model_size(weight_bytes)
     
     results = {
@@ -1046,7 +1088,7 @@ DEFAULT_MODEL_CONFIGS: List[Tuple[Any, ...]] = [
     ("llama3-3b", 128256, 3072, 1, 24, 8, 8192),
     ("llama3-8b", 128256, 4096, 1, 32, 8, 14336),
     ("mistral-7b", 32768, 4096, 1, 32, 8, 14336),
-    ("aya-8b", 256000, 4096, 1, 32, 8, 14336),
+    # ("aya-8b", 256000, 4096, 1, 32, 8, 14336),
 ]
 
 DEFAULT_TEST_CONFIGS: List[Tuple[int, int, int, int]] = [
@@ -1154,6 +1196,7 @@ def run_all_benchmarks(
                         config, batch_size, p_max_len, d_max_len, step_size
                     )
                     _empty_cache_if_cuda()
+                    gc.collect()
                     time.sleep(0.5)
                 except Exception as e:
                     print(f"[err] 组件 {comp_name} 测试失败: {e}")
