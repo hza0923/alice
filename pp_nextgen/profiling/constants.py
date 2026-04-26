@@ -12,3 +12,6 @@ PROFILE_TO_MODULE: dict[str, str] = {
 }
 
 KV_MODULES = frozenset({"attn_qk", "attn_av"})
+
+# lm_head is treated as fixed latency; prefill registry uses decode `average` ms (see fit_prefill_time).
+LM_HEAD_MODULE = "lm_head"

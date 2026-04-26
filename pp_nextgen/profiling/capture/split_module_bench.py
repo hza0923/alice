@@ -1168,7 +1168,7 @@ DEFAULT_TEST_CONFIGS: List[Tuple[int, int, int, int]] = [
     # (4, 700, 4000, 100),
     (8, 600, 1000, 100),
     (16, 600, 1000, 100),
-    (32, 500, 800, 100),
+    # (32, 500, 800, 100),
 ]
 
 QUICK_TEST_CONFIGS: List[Tuple[int, int, int, int]] = [

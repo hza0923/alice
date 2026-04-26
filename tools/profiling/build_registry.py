@@ -85,6 +85,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="If set, directory to write all_results.v1 JSON per input",
     )
+    p.add_argument(
+        "--plot-dir",
+        default=None,
+        help="If set, directory for per-input prefill/decode fit PNGs (see registry_builder)",
+    )
     return p.parse_args()
 
 
@@ -112,7 +117,15 @@ def main() -> int:
         return 2
 
     model_name = load_legacy_all_results(inputs[0]).model
-    reg = build_device_registry_v3([str(p) for p in inputs], model_name=model_name, kv_per_token_bytes=kv)
+    plot_dir = Path(args.plot_dir) if args.plot_dir else None
+    if plot_dir is not None and not plot_dir.is_absolute():
+        plot_dir = (root / plot_dir).resolve()
+    reg = build_device_registry_v3(
+        [str(p) for p in inputs],
+        model_name=model_name,
+        kv_per_token_bytes=kv,
+        plot_output_dir=plot_dir,
+    )
     validate_device_registry_minimal(reg)
 
     out = Path(args.out)
@@ -120,6 +133,8 @@ def main() -> int:
         out = (root / out).resolve()
     write_json(out, reg)
     print(f"Wrote registry: {out}")
+    if plot_dir is not None:
+        print(f"Wrote fit plots under: {plot_dir}")
 
     if args.emit_all_results:
         eroot = Path(args.emit_all_results)

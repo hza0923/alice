@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple
 
 import numpy as np
 
-from pp_nextgen.profiling.constants import KV_MODULES
+from pp_nextgen.profiling.constants import KV_MODULES, LM_HEAD_MODULE
 
 
 def _sorted_xy_from_map(d: Dict[str, float]) -> Tuple[np.ndarray, np.ndarray]:
@@ -33,7 +33,21 @@ def _quadratic_c0_c1_c2(x: np.ndarray, y: np.ndarray) -> Tuple[float, float, flo
     return float(c0), float(c1), float(c2)
 
 
-def fit_prefill_time(module_name: str, prefill_times: Dict[str, float]) -> Dict[str, Any]:
+def fit_prefill_time(
+    module_name: str,
+    prefill_times: Dict[str, float],
+    decode_times: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    if module_name == LM_HEAD_MODULE:
+        avg = float(decode_times.get("average", 0.0)) if isinstance(decode_times, dict) else 0.0
+        return {
+            "form": "constant",
+            "c0": avg,
+            "c1": 0.0,
+            "c2": 0.0,
+            "x": "seq_len",
+            "unit": "ms",
+        }
     x, y = _sorted_xy_from_map(prefill_times)
     if module_name in KV_MODULES:
         c0, c1, c2 = _quadratic_c0_c1_c2(x, y)
