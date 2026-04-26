@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run split-module benchmarks and emit legacy ``*_all_results.json`` (see ``profiling/README.md``)."""
-
+# 优化兼容cp36
 import sys
 from pathlib import Path
 

@@ -1,5 +1,5 @@
 """Split-module micro-benchmarks that emit legacy ``*_all_results.json`` for ``tools/build_registry.py``."""
-
+# 优化兼容cp36
 import argparse
 import gc
 import json
