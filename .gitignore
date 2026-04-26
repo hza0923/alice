@@ -11,3 +11,5 @@ outputs/datasets
 outputs/simulation
 dataset/
 README copy.md
+*_all_results.json
+my_profiles/
