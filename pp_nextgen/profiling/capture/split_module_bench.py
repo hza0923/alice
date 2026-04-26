@@ -980,7 +980,8 @@ def test_lm_head(config, batch_size, p_max_len, d_max_len, step):
                 try:
                     x = torch.randn(batch_size, seq_len, config.hidden_size, device=device, dtype=config.dtype)
                     time_ms = measure_time(
-                        lambda: lm_head(x),
+                        # Prefill只统计最后一个token的logits投影开销
+                        lambda: lm_head(x[:, -1:, :]),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
                         warmup=REPEAT_CONFIG['warmup_repeats']
                     )
