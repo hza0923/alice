@@ -71,7 +71,13 @@ def parse_args() -> argparse.Namespace:
 
 
 async def _client_submit(master_addr: str, context_len: int, target_len: int, batch_size: int) -> None:
-    ch = grpc.aio.insecure_channel(master_addr)
+    ch = grpc.aio.insecure_channel(
+        master_addr,
+        options=[
+            ("grpc.max_send_message_length", 16 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 16 * 1024 * 1024),
+        ],
+    )
     stub = pv2_grpc.MasterControlStub(ch)
     await stub.SubmitTask(
         pv2.TaskSubmitRequest(

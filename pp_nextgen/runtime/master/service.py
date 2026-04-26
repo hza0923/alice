@@ -17,6 +17,12 @@ from pp_nextgen.runtime.strategy import load_pipeline_strategy, pipeline_stage_o
 
 LOG = logging.getLogger("pp_nextgen.runtime.master")
 
+def _grpc_options(rt: RuntimeConfig) -> list[tuple[str, int]]:
+    return [
+        ("grpc.max_send_message_length", int(rt.max_send_message_length)),
+        ("grpc.max_receive_message_length", int(rt.max_receive_message_length)),
+    ]
+
 
 class MasterControlServicer(pv2_grpc.MasterControlServicer):
     def __init__(self, pipeline_path: str, rt: RuntimeConfig) -> None:
@@ -84,7 +90,10 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
             LOG.info("registered %s -> %s (%d/%d)", name, addr, len(self._addresses), len(self._expected))
             if self._addresses.keys() == self._expected:
                 self._all_registered.set()
-                ch = grpc.aio.insecure_channel(self._addresses[self._first_worker])
+                ch = grpc.aio.insecure_channel(
+                    self._addresses[self._first_worker],
+                    options=_grpc_options(self._rt),
+                )
                 self._first_stub = pv2_grpc.DataPlaneStub(ch)
                 self._ready.set()
                 await self.start_send_loop()
@@ -193,7 +202,7 @@ class MasterControlServicer(pv2_grpc.MasterControlServicer):
         if not addr:
             return
         timeout = float(self._rt.rpc_timeout_ms) / 1000.0
-        ch = grpc.aio.insecure_channel(addr)
+        ch = grpc.aio.insecure_channel(addr, options=_grpc_options(self._rt))
         stub = pv2_grpc.DataPlaneStub(ch)
         try:
             await stub.NotifyPipelineEnd(
@@ -217,7 +226,7 @@ class MasterRuntime:
 
     async def start(self) -> None:
         self._servicer = MasterControlServicer(self.pipeline_path, self.rt)
-        self._server = grpc.aio.server()
+        self._server = grpc.aio.server(options=_grpc_options(self.rt))
         pv2_grpc.add_MasterControlServicer_to_server(self._servicer, self._server)
         self._server.add_insecure_port(self.bind_addr)
         await self._server.start()

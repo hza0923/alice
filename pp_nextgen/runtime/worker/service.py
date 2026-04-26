@@ -35,6 +35,12 @@ from pp_nextgen.runtime.strategy import (
 
 LOG = logging.getLogger("pp_nextgen.runtime.worker")
 
+def _grpc_options(rt: RuntimeConfig) -> list[tuple[str, int]]:
+    return [
+        ("grpc.max_send_message_length", int(rt.max_send_message_length)),
+        ("grpc.max_receive_message_length", int(rt.max_receive_message_length)),
+    ]
+
 
 def _phase_name(frame: pv2.Frame) -> str:
     if frame.phase == pv2.PHASE_PREFILL:
@@ -172,7 +178,7 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
         }
 
     async def initialize(self) -> bool:
-        ch = grpc.aio.insecure_channel(self.master_addr)
+        ch = grpc.aio.insecure_channel(self.master_addr, options=_grpc_options(self._rt))
         self._master = pv2_grpc.MasterControlStub(ch)
         reg = await self._master.RegisterWorker(
             pv2.RegisterWorkerRequest(worker_name=self.worker_name, worker_address=self._public_addr),
@@ -188,7 +194,10 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                 timeout=reg_wait_s,
             )
             if nxt.ok and nxt.all_registered and nxt.has_next and nxt.next_worker_address:
-                nch = grpc.aio.insecure_channel(nxt.next_worker_address)
+                nch = grpc.aio.insecure_channel(
+                    nxt.next_worker_address,
+                    options=_grpc_options(self._rt),
+                )
                 self._next_stub = pv2_grpc.DataPlaneStub(nch)
                 LOG.info("next hop %s", nxt.next_worker_address)
                 break
@@ -290,7 +299,9 @@ class DataPlaneServicer(pv2_grpc.DataPlaneServicer):
                         timeout=float(self._rt.rpc_timeout_ms) / 1000.0,
                     )
                     if peer.ok and peer.address:
-                        stub = pv2_grpc.DataPlaneStub(grpc.aio.insecure_channel(peer.address))
+                        stub = pv2_grpc.DataPlaneStub(
+                            grpc.aio.insecure_channel(peer.address, options=_grpc_options(self._rt))
+                        )
                         await stub.NotifyPipelineEnd(
                             pv2.PipelineEndNotification(
                                 message=request.message,
@@ -672,7 +683,7 @@ class WorkerRuntime:
         self._server: Optional[grpc.aio.Server] = None
 
     async def start(self) -> None:
-        self._server = grpc.aio.server()
+        self._server = grpc.aio.server(options=_grpc_options(self._svc._rt))
         pv2_grpc.add_DataPlaneServicer_to_server(self._svc, self._server)
         self._server.add_insecure_port(self._bind)
         await self._server.start()

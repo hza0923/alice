@@ -17,6 +17,8 @@ class RuntimeConfig:
     max_in_flight_requests: int
     rpc_timeout_ms: int
     registration_wait_timeout_ms: int
+    max_send_message_length: int
+    max_receive_message_length: int
     payload_size_divisor: float
     execution_mode: str
     sleep_compute_offset_ms_default: float
@@ -61,6 +63,8 @@ def load_runtime_config(path: str | Path) -> RuntimeConfig:
         max_in_flight_requests=int(sched.get("max_in_flight_requests", 512)),
         rpc_timeout_ms=int(grpc.get("rpc_timeout_ms", 300000)),
         registration_wait_timeout_ms=int(grpc.get("registration_wait_timeout_ms", 600_000)),
+        max_send_message_length=int(grpc.get("max_send_message_length", 16 * 1024 * 1024)),
+        max_receive_message_length=int(grpc.get("max_receive_message_length", 16 * 1024 * 1024)),
         payload_size_divisor=psd,
         execution_mode=str(ex.get("mode", "sleep_executor")),
         sleep_compute_offset_ms_default=sleep_compute_offset_ms_default,

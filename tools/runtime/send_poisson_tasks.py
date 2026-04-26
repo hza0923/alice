@@ -44,6 +44,12 @@ def _parse() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Poisson arrival sender for MasterControl.SubmitTask")
     p.add_argument("--master", default="127.0.0.1:50050", help="Master gRPC host:port")
     p.add_argument("--timeout", type=float, default=30.0, help="RPC timeout seconds")
+    p.add_argument(
+        "--max-message-bytes",
+        type=int,
+        default=16 * 1024 * 1024,
+        help="gRPC max send/receive message bytes for this client channel",
+    )
     p.add_argument("--num-requests", type=int, default=10, help="Number of requests to submit")
     p.add_argument("--arrival-rate", type=float, default=1.0, help="Poisson rate lambda (req/s)")
     p.add_argument("--seed", type=int, default=42, help="RNG seed for Poisson/random mode")
@@ -127,7 +133,13 @@ def main() -> None:
     if args.mode == "file":
         file_specs = _load_file_specs(args.request_spec_file)
 
-    channel = grpc.insecure_channel(args.master)
+    channel = grpc.insecure_channel(
+        args.master,
+        options=[
+            ("grpc.max_send_message_length", int(args.max_message_bytes)),
+            ("grpc.max_receive_message_length", int(args.max_message_bytes)),
+        ],
+    )
     stub = pv2_grpc.MasterControlStub(channel)
     sent = 0
     try:

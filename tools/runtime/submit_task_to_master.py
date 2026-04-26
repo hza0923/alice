@@ -33,6 +33,12 @@ def _parse() -> argparse.Namespace:
     p.add_argument("--master", default="127.0.0.1:50050", help="Master gRPC host:port")
     p.add_argument("--timeout", type=float, default=60.0, help="RPC timeout seconds")
     p.add_argument(
+        "--max-message-bytes",
+        type=int,
+        default=16 * 1024 * 1024,
+        help="gRPC max send/receive message bytes for this client channel",
+    )
+    p.add_argument(
         "--pipeline-stop",
         action="store_true",
         help="Send is_end=True (drain ring and shut down pipeline per master logic)",
@@ -46,7 +52,13 @@ def _parse() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse()
-    channel = grpc.insecure_channel(args.master)
+    channel = grpc.insecure_channel(
+        args.master,
+        options=[
+            ("grpc.max_send_message_length", int(args.max_message_bytes)),
+            ("grpc.max_receive_message_length", int(args.max_message_bytes)),
+        ],
+    )
     stub = pv2_grpc.MasterControlStub(channel)
     if args.pipeline_stop:
         req = pv2.TaskSubmitRequest(

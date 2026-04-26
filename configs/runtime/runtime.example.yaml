@@ -5,9 +5,12 @@ runtime:
     rpc_timeout_ms: 300000
     # Master GetNextWorker does not return until all workers registered; keep this comfortably above worst-case startup skew.
     registration_wait_timeout_ms: 600000
+    # Raise gRPC message limits beyond the default 4MB to support large frame payloads.
+    max_send_message_length: 16777216
+    max_receive_message_length: 16777216
     # Nominal commBytes from strategy are divided by this factor for the actual dummy payload length (>=1).
     # Use >1 to shrink payloads when the LAN is slow and you want runs closer to compute/comm overlap settings.
-    payload_size_divisor: 8.0
+    payload_size_divisor: 16.0
   queues:
     task_queue_maxsize: 2048
     send_queue_maxsize: 2048

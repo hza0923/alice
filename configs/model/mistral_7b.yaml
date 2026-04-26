@@ -1,0 +1,49 @@
+model:
+  name: mistral-7b
+  num_layers: 32
+  hidden_size: 4096
+  num_attention_heads: 32
+  num_key_value_heads: 8
+  ffn_dim: 14336
+  vocab_size: 32768
+  dtype_bytes: 2
+
+
+memory_contract:
+  decode_only: true
+  kv_modules:
+    - attn_qk
+    - attn_av
+  kv_per_token_bytes: 2048
+  weight_only_modules:
+    - input_embed
+    - qkv_projection
+    - o_projection
+    - gate_up_projection
+    - down_projection
+    - output_embed
+
+comm_contract:
+  version: v1
+  compute_payload_locally: true
+
+# Scheduler-facing view (matches legacy module ids: up_projection, lm_head).
+scheduler:
+  num_layers: 32
+  hidden_size: 4096
+  n_head: 32
+  n_kv_head: 32
+  ffn_dim: 14336
+  vocab_size: 32768
+  dtype_bytes: 2
+  component_config:
+    input_embed: input_embed
+    decoder_layer:
+      - qkv_projection
+      - attn_qk
+      - attn_av
+      - o_projection
+      - up_projection
+      - down_projection
+    output_embed: lm_head
+  module_memory_gb: {}
