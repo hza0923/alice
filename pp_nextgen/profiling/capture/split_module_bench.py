@@ -471,6 +471,7 @@ def test_attn_qk(config, batch_size, p_max_len, d_max_len, step):
                     
                     time_ms = measure_time(qk_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
                     results["prefill_times"][str(seq_len)] = time_ms
+                    _empty_cache_if_cuda()
                 
                 except Exception as e:
                     results["status"] = "partial"
@@ -580,6 +581,7 @@ def test_attn_av(config, batch_size, p_max_len, d_max_len, step):
                     
                     time_ms = measure_time(av_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
                     results["prefill_times"][str(seq_len)] = time_ms
+                    _empty_cache_if_cuda()
                     
 
                 
