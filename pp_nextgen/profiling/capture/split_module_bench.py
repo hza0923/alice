@@ -152,7 +152,9 @@ def test_embed_tokens(config, batch_size, p_max_len, d_max_len, step):
     """测试 Embedding 层 - 从1到max_len逐步测试"""
     print("\n>>> 测试组件: Embedding")
     
-    embed = nn.Embedding(config.vocab_size, config.hidden_size, device=device).to(config.dtype)
+    embed = nn.Embedding(
+        config.vocab_size, config.hidden_size, device=device, dtype=config.dtype
+    )
     embed.eval()
     
     # 计算权重占用
@@ -955,8 +957,17 @@ def test_mlp(config, batch_size, p_max_len, d_max_len, step):
 def test_lm_head(config, batch_size, p_max_len, d_max_len, step):
     """测试 LM Head"""
     print("\n>>> 测试组件: LM Head")
-    
-    lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, device=device).to(config.dtype)
+    # Allocate weights in the target dtype on device. A default fp32 Linear then
+    # ``.to(fp16)`` can briefly need ~2× the final footprint (large for 128k vocab).
+    gc.collect()
+    _empty_cache_if_cuda()
+    lm_head = nn.Linear(
+        config.hidden_size,
+        config.vocab_size,
+        bias=False,
+        device=device,
+        dtype=config.dtype,
+    )
     lm_head.eval()
     
     # 计算权重占用
@@ -975,15 +986,17 @@ def test_lm_head(config, batch_size, p_max_len, d_max_len, step):
     
     try:
         with torch.no_grad():
-            # Prefill
+            # Prefill JSON keys follow seq_len; timing is last-token logits only, so one
+            # [B,1,H] buffer avoids growing B×S×H activations alongside the huge vocab head.
+            x_one = torch.randn(
+                batch_size, 1, config.hidden_size, device=device, dtype=config.dtype
+            )
             for seq_len in range(1, p_max_len + 1, step):
                 try:
-                    x = torch.randn(batch_size, seq_len, config.hidden_size, device=device, dtype=config.dtype)
                     time_ms = measure_time(
-                        # Prefill只统计最后一个token的logits投影开销
-                        lambda: lm_head(x[:, -1:, :]),
+                        lambda: lm_head(x_one),
                         n_repeats=REPEAT_CONFIG['n_repeats'],
-                        warmup=REPEAT_CONFIG['warmup_repeats']
+                        warmup=REPEAT_CONFIG['warmup_repeats'],
                     )
                     results["prefill_times"][str(seq_len)] = time_ms
                     _empty_cache_if_cuda()
