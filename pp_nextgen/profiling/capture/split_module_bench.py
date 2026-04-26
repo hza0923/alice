@@ -70,6 +70,27 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
+def gqa_qk_matmul(q: torch.Tensor, k: torch.Tensor, n_groups: int, head_dim: int) -> torch.Tensor:
+    """GQA-friendly QK matmul without materializing repeated KV heads."""
+    if n_groups == 1:
+        return torch.matmul(q, k.transpose(2, 3)) / (head_dim ** 0.5)
+    bsz, q_heads, q_len, dim = q.shape
+    kv_heads = k.shape[1]
+    q_grouped = q.view(bsz, kv_heads, n_groups, q_len, dim)
+    scores = torch.einsum("bhgqd,bhkd->bhgqk", q_grouped, k)
+    return (scores / (head_dim ** 0.5)).reshape(bsz, q_heads, q_len, k.shape[2])
+
+def gqa_av_matmul(attn_w: torch.Tensor, v: torch.Tensor, n_groups: int) -> torch.Tensor:
+    """GQA-friendly AV matmul without materializing repeated KV heads."""
+    if n_groups == 1:
+        return torch.matmul(attn_w, v)
+    bsz, q_heads, q_len, kv_len = attn_w.shape
+    kv_heads = v.shape[1]
+    head_dim = v.shape[3]
+    attn_grouped = attn_w.view(bsz, kv_heads, n_groups, q_len, kv_len)
+    out = torch.einsum("bhgqk,bhkd->bhgqd", attn_grouped, v)
+    return out.reshape(bsz, q_heads, q_len, head_dim)
+
 def rotate_half(x):
     x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
@@ -441,12 +462,15 @@ def test_attn_qk(config, batch_size, p_max_len, d_max_len, step):
                     k_cache[:, :, :seq_len, :] = k
                     
                     def qk_fn():
-                        k_repeated = repeat_kv(k_cache[:, :, :seq_len, :], config.num_key_value_groups)
-                        return torch.matmul(q, k_repeated.transpose(2, 3)) / (config.head_dim ** 0.5)
+                        return gqa_qk_matmul(
+                            q,
+                            k_cache[:, :, :seq_len, :],
+                            config.num_key_value_groups,
+                            config.head_dim,
+                        )
                     
                     time_ms = measure_time(qk_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
                     results["prefill_times"][str(seq_len)] = time_ms
-                    _empty_cache_if_cuda()
                 
                 except Exception as e:
                     results["status"] = "partial"
@@ -475,8 +499,12 @@ def test_attn_qk(config, batch_size, p_max_len, d_max_len, step):
                     k_cache[:, :, context_len-1:context_len, :] = k_new
                     
                     def decode_qk_fn():
-                        k_repeated = repeat_kv(k_cache[:, :, :context_len, :], config.num_key_value_groups)
-                        return torch.matmul(q, k_repeated.transpose(2, 3)) / (config.head_dim ** 0.5)
+                        return gqa_qk_matmul(
+                            q,
+                            k_cache[:, :, :context_len, :],
+                            config.num_key_value_groups,
+                            config.head_dim,
+                        )
                     
                     time_ms = measure_time(decode_qk_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
                     results["decode_times"][str(context_len)] = time_ms
@@ -544,12 +572,14 @@ def test_attn_av(config, batch_size, p_max_len, d_max_len, step):
                     v_cache[:, :, :seq_len, :] = v
                     
                     def av_fn():
-                        v_repeated = repeat_kv(v_cache[:, :, :seq_len, :], config.num_key_value_groups)
-                        return torch.matmul(attn_w, v_repeated)
+                        return gqa_av_matmul(
+                            attn_w,
+                            v_cache[:, :, :seq_len, :],
+                            config.num_key_value_groups,
+                        )
                     
                     time_ms = measure_time(av_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
                     results["prefill_times"][str(seq_len)] = time_ms
-                    _empty_cache_if_cuda()
                     
 
                 
@@ -577,8 +607,11 @@ def test_attn_av(config, batch_size, p_max_len, d_max_len, step):
                     v_cache[:, :, context_len-1:context_len, :] = v_new
                     
                     def decode_av_fn():
-                        v_repeated = repeat_kv(v_cache[:, :, :context_len, :], config.num_key_value_groups)
-                        return torch.matmul(attn_w, v_repeated)
+                        return gqa_av_matmul(
+                            attn_w,
+                            v_cache[:, :, :context_len, :],
+                            config.num_key_value_groups,
+                        )
                     
                     time_ms = measure_time(decode_av_fn, n_repeats=REPEAT_CONFIG['n_repeats'], warmup=REPEAT_CONFIG['warmup_repeats'])
                     results["decode_times"][str(context_len)] = time_ms
@@ -1001,12 +1034,12 @@ DEFAULT_MODEL_CONFIGS: List[Tuple[Any, ...]] = [
 ]
 
 DEFAULT_TEST_CONFIGS: List[Tuple[int, int, int, int]] = [
-    (1, 3000, 4000, 100),
-    (2, 2000, 4000, 100),
-    (4, 2000, 4000, 100),
-    (8, 1500, 4000, 100),
-    (16, 1200, 4000, 100),
-    (32, 700, 4000, 100),
+    # (1, 700, 4000, 100),
+    # (2, 700, 4000, 100),
+    # (4, 700, 4000, 100),
+    (8, 700, 2000, 100),
+    (16, 700, 2000, 100),
+    (32, 700, 2000, 100),
 ]
 
 QUICK_TEST_CONFIGS: List[Tuple[int, int, int, int]] = [
