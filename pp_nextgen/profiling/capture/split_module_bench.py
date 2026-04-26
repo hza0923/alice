@@ -1028,8 +1028,8 @@ def test_lm_head(config, batch_size, p_max_len, d_max_len, step):
 
 
 DEFAULT_MODEL_CONFIGS: List[Tuple[Any, ...]] = [
-    ("llama2-7b", 32000, 4096, 1, 32, 32, 11008),
-    ("llama2-13b", 32000, 5120, 1, 40, 40, 13824),
+    # ("llama2-7b", 32000, 4096, 1, 32, 32, 11008),
+    # ("llama2-13b", 32000, 5120, 1, 40, 40, 13824),
     ("llama3-3b", 128256, 3072, 1, 24, 8, 8192),
     ("llama3-8b", 128256, 4096, 1, 32, 8, 14336),
     ("mistral-7b", 32768, 4096, 1, 32, 8, 14336),
